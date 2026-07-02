@@ -1,0 +1,2813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext x='16' y='25' font-size='22' text-anchor='middle'%3E🎵%3C/text%3E%3C/svg%3E">
+    <title>歌词/字幕制作工具</title>
+    <style>
+        /* ===== 基本重置与全局样式 ===== */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; transition: color 0.25s, background-color 0.25s, border-color 0.25s, box-shadow 0.3s, transform 0.2s; }
+        body { background: #f0f4fa; height: 100vh; display: flex; flex-direction: column; color: #1a2634; overflow: hidden; font-size: 14px; line-height: 1.5; }
+        body.dark { background: #0f141c; color: #e6edf5; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #c8d4e2; border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8b8ca; }
+        body.dark ::-webkit-scrollbar-thumb { background: #3a485a; }
+        body.dark ::-webkit-scrollbar-thumb:hover { background: #4f6075; }
+
+        /* ===== 拖拽遮罩 ===== */
+        .drag-overlay { position: fixed; inset: 0; background: rgba(79,110,247,0.08); border: 4px dashed #4f6ef7; pointer-events: none; z-index: 9999; opacity: 0; transition: opacity 0.3s; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; color: #4f6ef7; letter-spacing: 2px; }
+        .drag-overlay.active { opacity: 1; }
+        body.dark .drag-overlay { background: rgba(79,110,247,0.12); border-color: #7a9aff; color: #7a9aff; }
+
+        /* ===== 顶部导航 ===== */
+        .header { display: flex; justify-content: center; align-items: center; padding: 10px 28px; background: rgba(255,255,255,0.72); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(200,212,226,0.35); flex-shrink: 0; z-index: 30; position: relative; }
+        body.dark .header { background: rgba(20,28,40,0.78); border-bottom: 1px solid rgba(60,75,95,0.4); }
+        .header .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 650; color: #142435; letter-spacing: -0.2px; }
+        body.dark .header .logo { color: #e6edf5; }
+        .header .logo .icon { font-size: 22px; }
+        .header .logo .badge { font-size: 9px; font-weight: 600; background: rgba(79,110,247,0.12); color: #4f6ef7; padding: 2px 10px; border-radius: 30px; letter-spacing: 0.3px; text-transform: uppercase; }
+        body.dark .header .logo .badge { background: rgba(79,110,247,0.20); color: #7a9aff; }
+        .header-actions { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 8px; }
+        .theme-toggle { font-size: 17px; cursor: pointer; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(200,212,226,0.30); border: none; color: #2c405a; transition: all 0.3s; }
+        .theme-toggle:hover { background: rgba(200,212,226,0.55); transform: rotate(12deg); }
+        body.dark .theme-toggle { background: rgba(60,75,95,0.35); color: #c8d8e8; }
+        body.dark .theme-toggle:hover { background: rgba(60,75,95,0.60); }
+        .theme-toggle .sun-symbol { display: none; }
+        .theme-toggle .moon-symbol { display: inline; }
+        body.dark .theme-toggle .sun-symbol { display: inline; }
+        body.dark .theme-toggle .moon-symbol { display: none; }
+
+        /* ===== 顶部内容区 ===== */
+        .top-section { flex-shrink: 0; padding: 16px 28px 10px; background: transparent; border-bottom: 1px solid rgba(200,212,226,0.25); }
+        body.dark .top-section { border-bottom: 1px solid rgba(60,75,95,0.30); }
+
+        /* 文件上传行 */
+        .file-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .file-label { display: inline-flex; align-items: center; gap: 7px; padding: 7px 18px; background: rgba(255,255,255,0.70); backdrop-filter: blur(8px); border: 1px solid rgba(200,212,226,0.40); border-radius: 30px; font-size: 13px; font-weight: 500; color: #2c405a; cursor: pointer; transition: all 0.25s; box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+        .file-label:hover { background: rgba(255,255,255,0.92); border-color: rgba(79,110,247,0.30); box-shadow: 0 4px 16px rgba(79,110,247,0.08); transform: translateY(-1px); }
+        body.dark .file-label { background: rgba(30,40,55,0.70); border-color: rgba(60,75,95,0.40); color: #c8d8e8; }
+        body.dark .file-label:hover { background: rgba(40,52,70,0.85); border-color: rgba(79,110,247,0.30); }
+        .file-label .upload-icon { font-size: 15px; }
+        #audioFile, #importFile { display: none; }
+        .file-label-import { border-style: solid; background: rgba(245,248,252,0.60); }
+        body.dark .file-label-import { background: rgba(25,35,48,0.60); }
+
+        /* 操作说明按钮 & 清除时间戳按钮（统一样式） */
+        .btn-help { display: inline-flex; align-items: center; gap: 7px; padding: 7px 18px; background: rgba(255,255,255,0.70); backdrop-filter: blur(8px); border: 1px solid rgba(200,212,226,0.40); border-radius: 30px; font-size: 13px; font-weight: 500; color: #2c405a; cursor: pointer; transition: all 0.25s; box-shadow: 0 1px 4px rgba(0,0,0,0.02); border-style: solid; background: rgba(245,248,252,0.60); }
+        .btn-help:hover { background: rgba(255,255,255,0.92); border-color: rgba(79,110,247,0.30); box-shadow: 0 4px 16px rgba(79,110,247,0.08); transform: translateY(-1px); }
+        body.dark .btn-help { background: rgba(25,35,48,0.60); border-color: rgba(60,75,95,0.40); color: #c8d8e8; }
+        body.dark .btn-help:hover { background: rgba(40,52,70,0.85); border-color: rgba(79,110,247,0.30); }
+        .btn-help .help-icon { font-size: 15px; }
+
+        /* 拖拽提示 */
+        .drag-hint { font-size: 11px; color: #8a9fb8; margin-left: 4px; opacity: 0.7; }
+        body.dark .drag-hint { color: #6a7f9b; }
+
+        /* 工具栏 */
+        .tool-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 14px; padding: 3px 0; }
+        .tool-bar .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 16px; border: 1px solid rgba(200,212,226,0.35); border-radius: 30px; font-size: 12.5px; font-weight: 500; background: rgba(255,255,255,0.70); backdrop-filter: blur(6px); color: #1a2b3e; cursor: pointer; transition: all 0.25s; box-shadow: 0 1px 4px rgba(0,0,0,0.03); white-space: nowrap; line-height: 1.4; }
+        .tool-bar .btn:hover { background: rgba(255,255,255,0.92); border-color: rgba(79,110,247,0.30); box-shadow: 0 4px 14px rgba(79,110,247,0.10); transform: translateY(-1.5px); }
+        .tool-bar .btn:active { transform: scale(0.96); }
+        body.dark .tool-bar .btn { background: rgba(30,40,55,0.70); border-color: rgba(60,75,95,0.40); color: #c8d8e8; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        body.dark .tool-bar .btn:hover { background: rgba(45,58,78,0.85); border-color: rgba(79,110,247,0.35); box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+        .tool-bar .btn-primary { background: #4f6ef7; border-color: #4f6ef7; color: #fff; box-shadow: 0 2px 12px rgba(79,110,247,0.30); }
+        .tool-bar .btn-primary:hover { background: #3d5de5; border-color: #3d5de5; box-shadow: 0 4px 20px rgba(79,110,247,0.40); transform: translateY(-1.5px); }
+        body.dark .tool-bar .btn-primary { background: #4f6ef7; border-color: #4f6ef7; color: #fff; }
+        body.dark .tool-bar .btn-primary:hover { background: #5e7af8; border-color: #5e7af8; }
+
+        /* 预览高亮样式（独立于 active） */
+        .marker-item.preview-highlight, .srt-item.preview-highlight {
+            background: rgba(79, 110, 247, 0.25) !important;
+            border-left: 4px solid #ff6b6b !important;
+            transform: scale(1.02);
+            transition: all 0.2s;
+            box-shadow: 0 2px 20px rgba(79,110,247,0.2);
+        }
+        body.dark .marker-item.preview-highlight, body.dark .srt-item.preview-highlight {
+            background: rgba(79, 110, 247, 0.35) !important;
+            border-left-color: #ff8a8a !important;
+        }
+
+        /* 模式切换开关 */
+        .mode-toggle { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.40); backdrop-filter: blur(6px); border-radius: 30px; padding: 2px 4px; border: 1px solid rgba(200,212,226,0.30); box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+        body.dark .mode-toggle { background: rgba(30,40,55,0.40); border-color: rgba(60,75,95,0.30); }
+        .mode-toggle .mode-btn { background: transparent; border: none; padding: 4px 14px; border-radius: 24px; font-size: 12px; font-weight: 600; color: #6a7f9b; cursor: pointer; transition: all 0.2s; }
+        .mode-toggle .mode-btn.active { background: #4f6ef7; color: #fff; box-shadow: 0 2px 8px rgba(79,110,247,0.25); }
+        body.dark .mode-toggle .mode-btn { color: #8aa3c0; }
+        body.dark .mode-toggle .mode-btn.active { background: #4f6ef7; color: #fff; }
+
+        /* 缩放组 & 步长组 & 滚速组（共用样式） */
+        .zoom-group, .step-group, .speed-group { display: flex; align-items: center; gap: 1px; background: rgba(255,255,255,0.40); backdrop-filter: blur(6px); border-radius: 30px; padding: 2px 4px; border: 1px solid rgba(200,212,226,0.30); box-shadow: 0 1px 4px rgba(0,0,0,0.02); }
+        body.dark .zoom-group, body.dark .step-group, body.dark .speed-group { background: rgba(30,40,55,0.40); border-color: rgba(60,75,95,0.30); }
+        .zoom-group .btn, .step-group .btn, .speed-group .btn { background: transparent; border: none; padding: 3px 10px; font-size: 14px; font-weight: 600; box-shadow: none; border-radius: 24px; min-width: 28px; color: #1a2b3e; }
+        .zoom-group .btn:hover, .step-group .btn:hover, .speed-group .btn:hover { background: rgba(200,212,226,0.35); transform: none; }
+        body.dark .zoom-group .btn, body.dark .step-group .btn, body.dark .speed-group .btn { color: #c8d8e8; }
+        body.dark .zoom-group .btn:hover, body.dark .step-group .btn:hover, body.dark .speed-group .btn:hover { background: rgba(60,75,95,0.35); }
+        .zoom-group .zoom-val, .step-group .step-val, .speed-group .speed-val { font-size: 11.5px; font-weight: 500; color: #6a7f9b; min-width: 54px; text-align: center; font-feature-settings: "tnum"; letter-spacing: 0.2px; }
+        body.dark .zoom-group .zoom-val, body.dark .step-group .step-val, body.dark .speed-group .speed-val { color: #8aa3c0; }
+        .step-group .step-val { min-width: 46px; }
+        .speed-group .speed-val { min-width: 40px; }
+
+        /* 保持步长和滚速标签样式一致 */
+        .tool-bar .step-label,
+        .tool-bar .speed-label {
+            font-size: 11px;
+            color: #7a8fa8;
+            margin-right: 1px;
+            font-weight: 450;
+            letter-spacing: 0.2px;
+        }
+        body.dark .tool-bar .speed-label { color: #6a7f9b; }
+        .tool-bar .divider { width: 1px; height: 22px; background: rgba(200,212,226,0.40); margin: 0 3px; }
+        body.dark .tool-bar .divider { background: rgba(60,75,95,0.40); }
+        .tool-bar .shortcut-hint { font-size: 10.5px; color: #8a9fb8; margin-left: 2px; letter-spacing: 0.2px; font-weight: 400; opacity: 0.75; }
+        body.dark .tool-bar .shortcut-hint { color: #6a7f9b; }
+
+        /* 信息面板 */
+        .info-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 3px 18px; background: rgba(255,255,255,0.50); backdrop-filter: blur(12px); border-radius: 16px; padding: 8px 16px; margin-bottom: 12px; border: 1px solid rgba(200,212,226,0.25); font-size: 12.5px; color: #2c405a; box-shadow: 0 1px 6px rgba(0,0,0,0.02); }
+        body.dark .info-panel { background: rgba(25,35,48,0.50); border-color: rgba(60,75,95,0.25); color: #c8d8e8; }
+        .info-panel .info-item { display: flex; align-items: baseline; gap: 4px; padding: 2px 0; white-space: nowrap; }
+        .info-panel .info-item .label { font-weight: 500; color: #7a8fa8; font-size: 10.5px; letter-spacing: 0.3px; text-transform: uppercase; }
+        body.dark .info-panel .info-item .label { color: #6a7f9b; }
+        .info-panel .info-item .value { font-weight: 500; color: #1a2b3e; font-feature-settings: "tnum"; }
+        body.dark .info-panel .info-item .value { color: #e6edf5; }
+        .info-panel .info-item .value .empty { color: #b0c0d0; font-weight: 400; }
+        body.dark .info-panel .info-item .value .empty { color: #5a6a7a; }
+
+        /* ===== 时间显示（含最新时间戳） ===== */
+        .time-display {
+            font-size: 22px;
+            font-weight: 600;
+            font-feature-settings: "tnum";
+            color: #1a2b3e;
+            margin-bottom: 5px;
+            letter-spacing: 0.3px;
+            font-variant-numeric: tabular-nums;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        body.dark .time-display { color: #e6edf5; }
+        .time-display .time-label {
+            font-size: 12px;
+            font-weight: 450;
+            color: #7a8fa8;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+        body.dark .time-display .time-label { color: #6a7f9b; }
+        .time-display .time-value {
+            font-weight: 600;
+        }
+        .time-display .time-value-latest {
+            color: #4f6ef7;
+            font-weight: 600;
+            min-width: 88px;
+            display: inline-block;
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+        }
+        body.dark .time-display .time-value-latest {
+            color: #7a9aff;
+        }
+        .time-display .latest-sep {
+            color: #c8d4e2;
+            margin: 0 2px;
+            font-weight: 300;
+        }
+        body.dark .time-display .latest-sep {
+            color: #3a485a;
+        }
+        .time-display .time-label-latest {
+            font-size: 12px;
+            font-weight: 450;
+            color: #4f6ef7;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            opacity: 0.8;
+        }
+        body.dark .time-display .time-label-latest {
+            color: #7a9aff;
+        }
+        .time-display .latest-empty {
+            color: #b0c0d0;
+            font-weight: 400;
+        }
+        body.dark .time-display .latest-empty {
+            color: #5a6a7a;
+        }
+
+        /* 波形容器（保留滚动属性，但主要靠播放头控制） */
+        .waveform-wrapper {
+            position: relative;
+            background: rgba(255,255,255,0.60);
+            backdrop-filter: blur(12px);
+            border-radius: 18px;
+            border: 1px solid rgba(200,212,226,0.25);
+            padding: 6px 6px 4px 6px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+            transition: box-shadow 0.3s;
+            overflow: hidden;
+        }
+        .waveform-wrapper:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+        body.dark .waveform-wrapper { background: rgba(25,35,48,0.55); border-color: rgba(60,75,95,0.25); }
+        body.dark .waveform-wrapper:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.30); }
+        #waveform { background: transparent; border-radius: 14px; cursor: pointer; width: 100%; }
+
+        /* 红色游标 */
+        .wavesurfer-cursor {
+            background: #ef4444 !important;
+            width: 2px !important;
+            z-index: 20 !important;
+            box-shadow: 0 0 8px rgba(239,68,68,0.35) !important;
+            position: absolute !important;
+        }
+        body.dark .wavesurfer-cursor {
+            box-shadow: 0 0 12px rgba(239,68,68,0.50) !important;
+        }
+
+        /* ===== 模态框（通用） ===== */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(6px); z-index: 998; display: none; animation: fadeIn 0.2s; }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.96); background: rgba(255,255,255,0.88); backdrop-filter: blur(24px); padding: 28px 32px 24px; border-radius: 24px; box-shadow: 0 32px 80px rgba(0,0,0,0.22); z-index: 999; display: none; min-width: 380px; max-width: 94vw; border: 1px solid rgba(255,255,255,0.20); animation: modalIn 0.28s forwards; }
+        @keyframes modalIn { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.94); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        body.dark .modal { background: rgba(28,38,52,0.92); border-color: rgba(60,75,95,0.30); box-shadow: 0 32px 80px rgba(0,0,0,0.50); }
+        .modal .modal-title { font-size: 18px; font-weight: 650; color: #142435; margin-bottom: 2px; }
+        body.dark .modal .modal-title { color: #e6edf5; }
+        .modal .modal-sub { font-size: 13.5px; color: #6a7f9b; margin-bottom: 18px; font-weight: 400; }
+        body.dark .modal .modal-sub { color: #8aa3c0; }
+        .modal input { width: 100%; padding: 12px 16px; font-size: 14.5px; border: 1.5px solid rgba(200,212,226,0.40); border-radius: 14px; margin-bottom: 20px; outline: none; transition: border 0.2s, box-shadow 0.2s; background: rgba(255,255,255,0.60); backdrop-filter: blur(6px); color: #1a2b3e; font-weight: 450; }
+        .modal input:focus { border-color: #4f6ef7; box-shadow: 0 0 0 4px rgba(79,110,247,0.10); background: rgba(255,255,255,0.85); }
+        body.dark .modal input { background: rgba(40,52,70,0.50); border-color: rgba(60,75,95,0.40); color: #e6edf5; }
+        body.dark .modal input:focus { border-color: #4f6ef7; box-shadow: 0 0 0 4px rgba(79,110,247,0.15); background: rgba(50,64,85,0.60); }
+        .modal .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+        .modal .modal-buttons .btn { padding: 8px 24px; border: none; border-radius: 30px; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .modal .modal-buttons .btn-secondary { background: rgba(200,212,226,0.30); color: #2c405a; }
+        .modal .modal-buttons .btn-secondary:hover { background: rgba(200,212,226,0.50); }
+        body.dark .modal .modal-buttons .btn-secondary { background: rgba(60,75,95,0.30); color: #c8d8e8; }
+        body.dark .modal .modal-buttons .btn-secondary:hover { background: rgba(60,75,95,0.50); }
+        .modal .modal-buttons .btn-primary { background: #4f6ef7; color: #fff; box-shadow: 0 2px 12px rgba(79,110,247,0.30); }
+        .modal .modal-buttons .btn-primary:hover { background: #3d5de5; box-shadow: 0 4px 20px rgba(79,110,247,0.40); transform: translateY(-1px); }
+        body.dark .modal .modal-buttons .btn-primary { background: #4f6ef7; color: #fff; }
+        body.dark .modal .modal-buttons .btn-primary:hover { background: #5e7af8; }
+
+        /* 导出格式选择按钮 */
+        .export-format-buttons { display: flex; gap: 16px; justify-content: center; margin: 24px 0; flex-wrap: wrap; }
+        .export-format-buttons .btn { min-width: 100px; padding: 12px 28px; font-size: 16px; font-weight: 600; border-radius: 40px; background: rgba(79,110,247,0.12); color: #4f6ef7; border: 2px solid rgba(79,110,247,0.20); transition: all 0.25s; cursor: pointer; }
+        .export-format-buttons .btn:hover { background: #4f6ef7; color: #fff; border-color: #4f6ef7; box-shadow: 0 4px 16px rgba(79,110,247,0.30); transform: translateY(-2px); }
+        .export-format-buttons .btn:active { transform: scale(0.96); }
+        body.dark .export-format-buttons .btn { background: rgba(79,110,247,0.20); color: #7a9aff; border-color: rgba(79,110,247,0.30); }
+        body.dark .export-format-buttons .btn:hover { background: #4f6ef7; color: #fff; border-color: #4f6ef7; }
+
+        /* ===== 操作说明模态框 ===== */
+        .help-content { font-size: 14px; line-height: 1.8; color: #1a2b3e; max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+        body.dark .help-content { color: #e6edf5; }
+        .help-content h3 { font-size: 15px; font-weight: 600; margin: 14px 0 6px; color: #4f6ef7; }
+        body.dark .help-content h3 { color: #7a9aff; }
+        .help-content h3:first-of-type { margin-top: 0; }
+        .help-content ul { padding-left: 20px; margin: 4px 0 8px; }
+        .help-content li { margin-bottom: 2px; }
+        .help-content .shortcut-table { width: 100%; border-collapse: collapse; margin: 6px 0 4px; font-size: 13px; }
+        .help-content .shortcut-table td { padding: 4px 12px; border-bottom: 1px solid rgba(200,212,226,0.30); }
+        .help-content .shortcut-table td:first-child { font-weight: 600; color: #4f6ef7; white-space: nowrap; }
+        body.dark .help-content .shortcut-table td { border-bottom-color: rgba(60,75,95,0.30); }
+        body.dark .help-content .shortcut-table td:first-child { color: #7a9aff; }
+        .help-content .tag { display: inline-block; padding: 0 8px; border-radius: 4px; font-size: 12px; font-weight: 500; background: rgba(79,110,247,0.12); color: #4f6ef7; }
+        body.dark .help-content .tag { background: rgba(79,110,247,0.20); color: #7a9aff; }
+        .help-content .mode-badge { display: inline-block; padding: 0 10px; border-radius: 4px; font-size: 12px; font-weight: 600; background: rgba(79,110,247,0.12); color: #4f6ef7; margin-right: 4px; }
+        body.dark .help-content .mode-badge { background: rgba(79,110,247,0.20); color: #7a9aff; }
+
+        /* ===== 列表容器 ===== */
+        .markers-container { flex-grow: 1; padding: 0 28px 12px; overflow-y: auto; min-height: 0; background: transparent; position: relative; }
+
+        /* 标题行固定 + 圆角 + 背景不透明（消除缝隙） */
+        .markers-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 12px 16px 8px 16px;
+            margin-top: 14px;
+            margin-bottom: 8px;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid rgba(200, 212, 226, 0.25);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+        body.dark .markers-header {
+            background: rgba(25, 35, 48, 0.95);
+            border: 1px solid rgba(60, 75, 95, 0.30);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .markers-header .title { font-size: 13.5px; font-weight: 600; color: #1a2b3e; letter-spacing: 0.2px; display: flex; align-items: center; gap: 8px; }
+        body.dark .markers-header .title { color: #e6edf5; }
+        .markers-header .title .icon { font-size: 15px; }
+        .markers-header .title .select-all-wrapper { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; font-size: 12px; color: #6a7f9b; cursor: pointer; }
+        .markers-header .title .select-all-wrapper input[type="checkbox"] { width: 14px; height: 14px; accent-color: #4f6ef7; cursor: pointer; }
+        body.dark .markers-header .title .select-all-wrapper { color: #8aa3c0; }
+        .markers-header .count { font-size: 11.5px; color: #6a7f9b; background: rgba(200,212,226,0.25); padding: 2px 14px; border-radius: 30px; font-weight: 500; backdrop-filter: blur(4px); white-space: nowrap; }
+        body.dark .markers-header .count { background: rgba(60,75,95,0.25); color: #8aa3c0; }
+
+        .marker-list { display: flex; flex-direction: column; gap: 5px; }
+
+        /* ================================================================
+           条目样式（LRC 和 SRT）
+           ================================================================ */
+
+        /* ----- LRC 条目 (.marker-item) ----- */
+        .marker-item {
+            background: rgba(255,255,255,0.55);
+            backdrop-filter: blur(8px);
+            padding: 10px 16px;
+            border-radius: 16px;
+            font-size: 13.5px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            border: 1px solid rgba(200,212,226,0.20);
+            transition: all 0.25s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+        }
+        .marker-item:hover { background: rgba(255,255,255,0.80); border-color: rgba(200,212,226,0.40); box-shadow: 0 2px 16px rgba(0,0,0,0.04); transform: translateY(-1px); }
+        body.dark .marker-item { background: rgba(25,35,48,0.55); border-color: rgba(60,75,95,0.20); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+        body.dark .marker-item:hover { background: rgba(35,48,65,0.75); border-color: rgba(60,75,95,0.35); box-shadow: 0 2px 16px rgba(0,0,0,0.20); }
+        .marker-item.active { background: rgba(79,110,247,0.08); border-color: rgba(79,110,247,0.35); border-left: 4px solid #4f6ef7; box-shadow: 0 2px 20px rgba(79,110,247,0.08); transform: translateX(3px); }
+        body.dark .marker-item.active { background: rgba(79,110,247,0.10); border-color: rgba(79,110,247,0.30); border-left-color: #4f6ef7; box-shadow: 0 2px 20px rgba(79,110,247,0.10); }
+        .marker-item .item-check { flex-shrink: 0; margin-top: 2px; accent-color: #4f6ef7; cursor: pointer; width: 14px; height: 14px; }
+        .marker-item .num { color: #8a9fb8; user-select: none; min-width: 24px; text-align: right; font-weight: 500; font-size: 12.5px; padding-top: 1px; font-feature-settings: "tnum"; }
+        body.dark .marker-item .num { color: #6a7f9b; }
+        .marker-item .text { flex: 1; outline: none; white-space: pre-wrap; word-break: break-word; min-height: 1.4em; user-select: text; pointer-events: auto; color: #1a2b3e; line-height: 1.6; padding: 1px 3px; border-radius: 4px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+        body.dark .marker-item .text { color: #e6edf5; }
+        .marker-item .text:focus { background: rgba(255,255,255,0.50); border-radius: 6px; box-shadow: 0 0 0 2px rgba(79,110,247,0.10); }
+        body.dark .marker-item .text:focus { background: rgba(40,55,75,0.40); box-shadow: 0 0 0 2px rgba(79,110,247,0.12); }
+        .marker-item .text:empty::before { content: "（空歌词）"; color: #b0c0d0; font-style: italic; font-weight: 400; }
+        body.dark .marker-item .text:empty::before { color: #5a6a7a; }
+
+        /* ----- SRT 条目 (.srt-item) ----- */
+        .srt-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            background: rgba(255,255,255,0.55);
+            backdrop-filter: blur(8px);
+            padding: 10px 16px;
+            border-radius: 16px;
+            border: 1px solid rgba(200,212,226,0.20);
+            transition: all 0.25s;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+            font-weight: 700;
+            font-size: 16px;
+        }
+        .srt-item:hover { background: rgba(255,255,255,0.80); border-color: rgba(200,212,226,0.40); box-shadow: 0 2px 16px rgba(0,0,0,0.04); transform: translateY(-1px); }
+        body.dark .srt-item { background: rgba(25,35,48,0.55); border-color: rgba(60,75,95,0.20); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+        body.dark .srt-item:hover { background: rgba(35,48,65,0.75); border-color: rgba(60,75,95,0.35); box-shadow: 0 2px 16px rgba(0,0,0,0.20); }
+        .srt-item.active { background: rgba(79,110,247,0.08); border-color: rgba(79,110,247,0.35); border-left: 4px solid #4f6ef7; box-shadow: 0 2px 20px rgba(79,110,247,0.08); transform: translateX(3px); }
+        body.dark .srt-item.active { background: rgba(79,110,247,0.10); border-color: rgba(79,110,247,0.30); border-left-color: #4f6ef7; box-shadow: 0 2px 20px rgba(79,110,247,0.10); }
+
+        .srt-top-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .srt-index-num {
+            color: #8a9fb8;
+            user-select: none;
+            min-width: 24px;
+            text-align: right;
+            font-weight: 500;
+            font-size: 12.5px;
+            font-feature-settings: "tnum";
+        }
+        body.dark .srt-index-num { color: #6a7f9b; }
+
+        .srt-item .srt-times {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #4f6ef7;
+            margin-left: 0;
+            cursor: default;
+        }
+        .srt-item .srt-times span {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .srt-item .srt-times span:hover { background: rgba(79,110,247,0.10); }
+        .srt-item .srt-times span.selected { background: rgba(79,110,247,0.25); outline: 2px solid #4f6ef7; }
+        body.dark .srt-item .srt-times span { color: #7a9aff; }
+        body.dark .srt-item .srt-times span:hover { background: rgba(79,110,247,0.20); }
+        body.dark .srt-item .srt-times span.selected { background: rgba(79,110,247,0.35); }
+
+        .srt-item .srt-text {
+            flex: 1;
+            outline: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+            min-height: 1.4em;
+            user-select: text;
+            pointer-events: auto;
+            color: #1a2b3e;
+            line-height: 1.6;
+            padding: 1px 3px;
+            border-radius: 4px;
+            margin-left: 0;
+            margin-top: 2px;
+        }
+        body.dark .srt-item .srt-text { color: #e6edf5; }
+        .srt-item .srt-text:focus { background: rgba(255,255,255,0.50); border-radius: 6px; box-shadow: 0 0 0 2px rgba(79,110,247,0.10); }
+        body.dark .srt-item .srt-text:focus { background: rgba(40,55,75,0.40); box-shadow: 0 0 0 2px rgba(79,110,247,0.12); }
+        .srt-item .srt-text:empty::before { content: "（空字幕）"; color: #b0c0d0; font-style: italic; font-weight: 400; }
+        body.dark .srt-item .srt-text:empty::before { color: #5a6a7a; }
+
+        .srt-item .item-check {
+            flex-shrink: 0;
+            margin-top: 0;
+            accent-color: #4f6ef7;
+            cursor: pointer;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* 闪烁动画 */
+        @keyframes flashRow { 0%,100% { background: rgba(79,110,247,0.08); } 50% { background: rgba(79,110,247,0.35); } }
+        .marker-item.flash, .srt-item.flash { animation: flashRow 0.8s ease 2; }
+
+        /* Toast */
+        .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(0,0,0,0.80); backdrop-filter: blur(12px); color: #fff; padding: 10px 24px; border-radius: 30px; font-size: 14px; font-weight: 500; z-index: 9999; opacity: 0; transition: all 0.4s; pointer-events: none; box-shadow: 0 4px 24px rgba(0,0,0,0.20); }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        body.dark .toast { background: rgba(20,28,40,0.90); box-shadow: 0 4px 24px rgba(0,0,0,0.40); }
+
+        /* 对齐控制（左/中） */
+        body.align-left .marker-item .text,
+        body.align-left .srt-item .srt-text {
+            text-align: left;
+        }
+        body.align-center .marker-item .text,
+        body.align-center .srt-item .srt-text {
+            text-align: center;
+        }
+
+        /* 波形滚动条适配深色 */
+        #waveform::part(scroll) {
+            scrollbar-width: thin;
+            scrollbar-color: #c8d4e2 transparent;
+        }
+        #waveform::part(scroll)::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        #waveform::part(scroll)::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #waveform::part(scroll)::-webkit-scrollbar-thumb {
+            background: #c8d4e2;
+            border-radius: 6px;
+        }
+        #waveform::part(scroll)::-webkit-scrollbar-thumb:hover {
+            background: #a8b8ca;
+        }
+        body.dark #waveform::part(scroll) {
+            scrollbar-color: #3a485a transparent;
+        }
+        body.dark #waveform::part(scroll)::-webkit-scrollbar-thumb {
+            background: #3a485a;
+        }
+        body.dark #waveform::part(scroll)::-webkit-scrollbar-thumb:hover {
+            background: #4f6075;
+        }
+        .btn-help:focus, .tool-bar .btn:focus {
+            outline: none;
+        }
+
+        /* 响应式 */
+        .btn-icon-only { display: none; }
+        @media (max-width: 520px) { .btn-icon-only { display: inline; } .btn-label { display: none; } }
+        .marker-item .text::selection, .srt-item .srt-text::selection { background: rgba(79,110,247,0.20); }
+        body.dark .marker-item .text::selection, body.dark .srt-item .srt-text::selection { background: rgba(79,110,247,0.25); }
+
+        /* ===== 配置模态框专用样式 ===== */
+        .config-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: 12px;
+            background: rgba(200,212,226,0.08);
+            transition: background 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .config-option:hover {
+            background: rgba(200,212,226,0.16);
+        }
+        body.dark .config-option {
+            background: rgba(60,75,95,0.10);
+        }
+        body.dark .config-option:hover {
+            background: rgba(60,75,95,0.20);
+        }
+        .config-option input[type="checkbox"] {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            accent-color: #4f6ef7;
+            margin-top: 2px;
+            cursor: pointer;
+        }
+        .config-option .config-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1a2b3e;
+        }
+        body.dark .config-option .config-label {
+            color: #e6edf5;
+        }
+        .config-option .config-desc {
+            font-size: 12.5px;
+            color: #7a8fa8;
+            margin-top: 2px;
+            font-weight: 400;
+            line-height: 1.5;
+        }
+        body.dark .config-option .config-desc {
+            color: #8aa3c0;
+        }
+        .config-option .config-tag {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 0 8px;
+            border-radius: 12px;
+            background: rgba(79,110,247,0.12);
+            color: #4f6ef7;
+            margin-left: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        body.dark .config-option .config-tag {
+            background: rgba(79,110,247,0.20);
+            color: #7a9aff;
+        }
+        .config-hint {
+            font-size: 12px;
+            color: #8a9fb8;
+            padding: 10px 14px;
+            background: rgba(200,212,226,0.10);
+            border-radius: 10px;
+            margin: 4px 0 12px 0;
+            line-height: 1.6;
+        }
+        body.dark .config-hint {
+            background: rgba(60,75,95,0.15);
+            color: #8aa3c0;
+        }
+        .config-hint strong {
+            color: #4f6ef7;
+        }
+        body.dark .config-hint strong {
+            color: #7a9aff;
+        }
+        .config-modal .config-options {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin: 12px 0 16px 0;
+        }
+        .config-option.disabled {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== 拖拽遮罩 ===== -->
+    <div class="drag-overlay" id="dragOverlay">📂 释放文件以导入</div>
+
+    <!-- ===== 顶部导航 ===== -->
+    <div class="header">
+        <div class="logo"><span class="icon">🎵</span><span>歌词/字幕工具</span><span class="badge">v2.1</span></div>
+        <div class="header-actions">
+            <button id="themeToggle" class="theme-toggle" title="切换主题" aria-label="切换主题">
+                <span class="sun-symbol">☀</span><span class="moon-symbol">☽</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== 顶部内容区 ===== -->
+    <div class="top-section">
+        <!-- 文件上传 + 操作说明 -->
+        <div class="file-row">
+            <label class="file-label" for="audioFile"><span class="upload-icon">📂</span><span>加载音频</span></label>
+            <input type="file" id="audioFile" accept="audio/*" />
+            <label class="file-label file-label-import" for="importFile"><span class="upload-icon">📄</span><span>导入歌词/字幕</span></label>
+            <input type="file" id="importFile" accept=".txt,.lrc,.srt" />
+            <button class="btn-help" id="addItemBtn"><span class="help-icon">➕</span><span>添加歌词/字幕</span></button>
+            <button class="btn-help" id="clearTimestampBtn"><span class="help-icon">🧹</span><span>清除时间戳</span></button>
+            <button class="btn-help" id="deleteSelectedBtn"><span class="help-icon">🗑️</span><span>删除选中行</span></button>
+            <button class="btn-help" id="transferBtn"><span class="help-icon">🔄</span><span>时间戳转移</span></button>
+            <button class="btn-help" id="jumpToTimestampBtn"><span class="help-icon">🎯</span><span>游标定位到波形</span></button>
+            <button class="btn-help" id="jumpLatestTimestampBtn"><span class="help-icon">⏩</span><span>跳转最新时间戳</span></button>
+			<button class="btn-help" id="jumpToRightBtn"><span class="help-icon">⏩</span><span>波形左边界</span></button>
+            <button class="btn-help" id="jumpToLeftBtn"><span class="help-icon">⏪</span><span>波形右边界</span></button>
+            <button class="btn-help" id="helpBtn"><span class="help-icon">❓</span><span>操作说明</span></button>
+            <span class="drag-hint">📥 支持拖拽文件到页面</span>
+        </div>
+
+        <!-- 工具栏 -->
+        <div class="tool-bar">
+            <button class="btn btn-primary" id="playPause"><span>▶</span><span class="btn-label">播放</span></button>
+            <span class="divider"></span>
+            <div class="zoom-group">
+                <button class="btn" id="zoomOut" title="缩小">−</button>
+                <span class="zoom-val" id="zoomValue">6.25px/s</span>
+                <button class="btn" id="zoomIn" title="放大">+</button>
+            </div>
+            <span class="divider"></span>
+            <button class="btn" id="undoBtn" title="撤销 (Ctrl+Z)"><span>↩</span><span class="btn-label">撤销</span></button>
+            <button class="btn" id="redoBtn" title="重做 (Ctrl+Y)"><span>↪</span><span class="btn-label">重做</span></button>
+            <span class="divider"></span>
+            <!-- ===== 更新时间戳 + 配置按钮 ===== -->
+            <button class="btn" id="updateTimeBtn"><span>⏱</span><span class="btn-label">更新时间戳</span></button>
+            <button class="btn" id="configBtn" title="配置时间戳更新选项"><span>⚙️</span><span class="btn-label">配置</span></button>
+            <span class="divider"></span>
+            <div class="mode-toggle" id="modeToggle">
+                <button class="mode-btn active" data-mode="lrc">LRC</button>
+                <button class="mode-btn" data-mode="srt">SRT</button>
+            </div>
+            <!-- 歌词位置 -->
+            <span class="divider"></span>
+            <div class="mode-toggle" id="alignToggle">
+                <button class="mode-btn active" data-align="left">左对齐</button>
+                <button class="mode-btn" data-align="center">居中</button>
+            </div>
+            <span class="divider"></span>
+            <span class="step-label">步长</span>
+            <div class="step-group">
+                <button class="btn" id="stepDown" title="减小步长">−</button>
+                <span class="step-val" id="stepValue">100ms</span>
+                <button class="btn" id="stepUp" title="增大步长">+</button>
+            </div>
+            <!-- 滚轮速度控制 -->
+            <span class="speed-label">滚速</span>
+            <div class="speed-group" id="speedGroup">
+                <button class="btn" id="speedDown" title="减小滚轮速度">−</button>
+                <span class="speed-val" id="speedValue">1.0</span>
+                <button class="btn" id="speedUp" title="增大滚轮速度">+</button>
+            </div>
+
+
+            <span class="divider"></span>
+            <span class="step-label">左放宽</span>
+            <div class="step-group" id="rightBoundaryGroup">
+                <button class="btn" id="rightBoundaryDown" title="减小右放宽值">−</button>
+                <span class="step-val" id="rightBoundaryValue">100ms</span>
+                <button class="btn" id="rightBoundaryUp" title="增大右放宽值">+</button>
+            </div>
+			
+            <span class="divider"></span>
+            <span class="step-label">右放宽</span>
+            <div class="step-group" id="leftBoundaryGroup">
+                <button class="btn" id="leftBoundaryDown" title="减小左放宽值">−</button>
+                <span class="step-val" id="leftBoundaryValue">100ms</span>
+                <button class="btn" id="leftBoundaryUp" title="增大左放宽值">+</button>
+            </div>
+
+
+
+            <!-- 导出按钮 -->
+            <button class="btn" id="exportBtn"><span>💾</span><span class="btn-label">导出</span></button>
+        </div>
+
+        <!-- 信息面板 -->
+        <div class="info-panel">
+            <div class="info-item"><span class="label">文件</span><span class="value" id="f-name"><span class="empty">未加载</span></span></div>
+            <div class="info-item"><span class="label">格式</span><span class="value" id="f-type"><span class="empty">-</span></span></div>
+            <div class="info-item"><span class="label">时长</span><span class="value" id="f-duration"><span class="empty">-</span></span></div>
+            <div class="info-item"><span class="label">采样率</span><span class="value" id="f-sample"><span class="empty">-</span> <span style="font-weight:400;color:#8a9fb8;">Hz</span></span></div>
+            <div class="info-item"><span class="label">声道</span><span class="value" id="f-channel"><span class="empty">-</span></span></div>
+            <div class="info-item"><span class="label">大小</span><span class="value" id="f-size"><span class="empty">-</span></span></div>
+        </div>
+
+        <!-- ===== 时间显示（含最新时间戳） ===== -->
+        <div class="time-display">
+            <span class="time-label">▶ 当前</span>
+            <span class="time-value" id="currentTime">[00:00.000]</span>
+            <span class="latest-sep">|</span>
+            <span class="time-label-latest">⏱ 最新</span>
+            <span class="time-value-latest" id="lastTimestampDisplay">[00:00.000]</span>
+        </div>
+
+        <!-- 波形 -->
+        <div class="waveform-wrapper" id="waveformWrapper">
+            <div id="waveform"></div>
+            <div id="hoverCursor" style="position:absolute; top:0; left:0; width:2px; height:100%; background:rgba(255,0,0,0.25); pointer-events:none; z-index:5; display:none;"></div>
+        </div>
+
+        <!-- 模态框：添加内容 -->
+        <div class="modal-overlay" id="modalOverlay"></div>
+        <div class="modal" id="noteModal">
+            <div class="modal-title" id="modalTitle">✏️ 添加歌词</div>
+            <div class="modal-sub" id="modalSub">输入文字后按回车保存</div>
+            <input id="noteInput" placeholder="输入内容…" autofocus />
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancelNote">取消</button>
+                <button class="btn btn-primary" id="saveNote">保存</button>
+            </div>
+        </div>
+
+        <!-- ===== 配置模态框（收纳三个复选框） ===== -->
+        <div class="modal-overlay" id="configModalOverlay"></div>
+        <div class="modal config-modal" id="configModal">
+            <div class="modal-title">⚙️ 时间戳更新配置</div>
+            <div class="modal-sub">配置更新时间戳时的行为选项，保存后立即生效</div>
+
+            <div class="config-options">
+                <!-- 选项1：空格键更新时间戳 -->
+                <div class="config-option" id="configOptionSpace">
+                    <input type="checkbox" id="spaceUpdateCheck" />
+                    <div>
+                        <div class="config-label">
+                            空格键更新时间戳
+                            <span class="config-tag">快捷键</span>
+                        </div>
+                        <div class="config-desc">勾选后，按 <kbd>空格键</kbd> 不再控制播放/暂停，而是执行「更新时间戳」操作</div>
+                    </div>
+                </div>
+
+                <!-- 选项2：中英文歌词/字幕 -->
+                <div class="config-option" id="configOptionBilingual">
+                    <input type="checkbox" id="bilingualCheck" />
+                    <div>
+                        <div class="config-label">
+                            中英文歌词/字幕
+                            <span class="config-tag">成对更新</span>
+                        </div>
+                        <div class="config-desc">勾选后，更新时间戳时<strong>成对</strong>更新相邻两行（适合中英文对照歌词或双语字幕）</div>
+                    </div>
+                </div>
+
+                <!-- 选项3：只更新结束时间 -->
+                <div class="config-option" id="configOptionOnlyEnd">
+                    <input type="checkbox" id="onlyEndCheck" />
+                    <div>
+                        <div class="config-label">
+                            只更新结束时间
+                            <span class="config-tag">SRT专用</span>
+                        </div>
+                        <div class="config-desc">SRT 模式专用，勾选后每次只更新当前行的<strong>结束时间</strong>，不改变开始时间</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-hint">
+                💡 <strong>更新步骤：</strong>① 在波形上定位到目标位置 → ② 选中要更新的行（或使用自动模式） → ③ 点击「⏱ 更新时间戳」或按 <kbd>空格</kbd>（需勾选上方选项） → ④ 时间戳自动填入当前游标位置
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancelConfig">取消</button>
+                <button class="btn btn-primary" id="saveConfig">保存配置</button>
+            </div>
+        </div>
+
+        <!-- 模态框：导出格式选择 -->
+        <div class="modal-overlay" id="exportModalOverlay"></div>
+        <div class="modal" id="exportModal">
+            <div class="modal-title">📤 选择导出格式</div>
+            <div class="modal-sub">请选择要导出的文件格式（TXT 内容随当前模式）</div>
+            <div class="export-format-buttons">
+                <button class="btn btn-primary" data-format="txt">TXT</button>
+                <button class="btn btn-primary" data-format="lrc">LRC</button>
+                <button class="btn btn-primary" id="exportSrtBtn" data-format="srt">SRT</button>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancelExport">取消</button>
+            </div>
+        </div>
+
+        <!-- SRT导出选项子模态框 -->
+        <div class="modal-overlay" id="srtExportModalOverlay"></div>
+        <div class="modal" id="srtExportModal">
+            <div class="modal-title">📤 选择导出行</div>
+            <div class="modal-sub">请选择要导出的字幕行范围</div>
+            <div class="export-format-buttons">
+                <button class="btn btn-primary" data-srt-export="all">全部导出</button>
+                <button class="btn btn-primary" data-srt-export="odd">导出单数行</button>
+                <button class="btn btn-primary" data-srt-export="even">导出双数行</button>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancelSrtExport">取消</button>
+            </div>
+        </div>
+
+        <!-- 模态框：操作说明 -->
+        <div class="modal-overlay" id="helpModalOverlay"></div>
+        <div class="modal" id="helpModal">
+            <div class="modal-title">📖 操作说明</div>
+            <div class="modal-sub">快速上手 · 核心操作</div>
+            <div class="help-content">
+                <h3>🎯 快速上手（5步）</h3>
+                <ol style="padding-left:20px;margin-bottom:12px;">
+                    <li><strong>加载音频</strong> → 点击「📂 加载音频」选择文件，或拖拽音频文件到页面</li>
+                    <li><strong>选择模式</strong> → 点击 <span class="tag">LRC</span>（歌词）或 <span class="tag">SRT</span>（字幕）</li>
+                    <li><strong>添加内容</strong> → 双击波形或按 <span class="tag">Enter</span> 键，输入文字（SRT 模式会自动添加当前时间作为开始时间）</li>
+                    <li><strong>添加时间戳</strong> → 点击「⏱ 更新时间戳」或按空格键（需在配置中勾选「空格键更新时间戳」）</li>
+                    <li><strong>导出文件</strong> → 点击「💾 导出」，选择格式后保存</li>
+                </ol>
+
+                <h3>📝 两种模式</h3>
+                <ul>
+                    <li><span class="mode-badge">LRC</span> 每行格式：<code>[mm:ss.mmm]歌词内容</code>，适合卡拉OK歌词</li>
+                    <li><span class="mode-badge">SRT</span> 每行含 <strong>开始</strong> 和 <strong>结束</strong> 两个时间戳，适合视频字幕</li>
+                </ul>
+
+                <h3>⏱ 更新时间戳</h3>
+                <ul>
+                    <li><strong>LRC模式</strong>：依次为每行添加时间戳；若勾选「中英文歌词/字幕」，则同时为下一行设置相同时间戳</li>
+                    <li><strong>SRT模式</strong>：点击时间范围中的 <strong>开始</strong> 或 <strong>结束</strong>（高亮后）→ 点击按钮单独更新；无选中时按顺序自动填充开始或结束时间</li>
+                    <li><strong>只更新结束时间</strong>（SRT模式专用）：勾选后，每次只更新当前行的结束时间，不改变开始时间；若同时勾选「中英文歌词/字幕」，则成对更新相邻两行的结束时间</li>
+                    <li>所有选项可在 <strong>⚙️ 配置</strong> 弹窗中统一管理</li>
+                </ul>
+
+                <h3>📍 左右边界微调</h3>
+                <ul>
+                    <li>点击「<strong>⏪ 左边界</strong>」按钮，程序会检测当前位置左侧最近的有声段起始点，然后自动「加上」边界放宽值，让游标向右（进入有声区内部）偏移。</li>
+                    <li>点击「<strong>⏩ 右边界</strong>」按钮，程序会检测当前位置右侧最近的有声段结束点，然后自动「减去」边界放宽值，让游标向左（回到有声区内部）偏移。</li>
+                    <li>「边界放宽」值可在工具栏中调整（步长 50ms，默认 100ms），方便您根据音频特点（如是否需要包含句前/句后呼吸声）灵活微调。</li>
+                    <li>如果未检测到有效边界，则直接在当前游标位置向右或左移动对应的放宽值。</li>
+                </ul>
+
+                <h3>🔄 时间戳转移</h3>
+                <ul>
+                    <li>当您在 <strong>LRC 模式</strong> 下已有带时间戳的歌词时，点击「<strong>时间戳转移</strong>」按钮，可将每行歌词的时间戳复制为 SRT 模式的 <strong>开始时间</strong>，并自动切换到 SRT 模式。</li>
+                    <li>此操作不会删除原 LRC 数据，转移后您可继续为 SRT 字幕添加结束时间。</li>
+                    <li>若 LRC 中存在未打时间戳的行，则对应 SRT 的开始时间会留空，您可后续单独补填。</li>
+                </ul>
+
+                <h3>📍 波形定位</h3>
+                <ul>
+                    <li><strong>游标定位到波形</strong>：选中某行歌词/字幕（点击该行使其高亮），点击此按钮，波形播放头将跳转到该行的时间戳位置（LRC模式为 <code>time</code>，SRT模式为 <code>start</code>），方便您快速试听对应的音频片段。</li>
+                    <li><strong>跳转最新时间戳</strong>：无论当前选中哪一行，点击此按钮会自动滚动到列表中最后一个拥有有效时间戳的行（忽略时间为 0 或空的行），并高亮该行，同时波形跳转到该时间位置。适合在处理大量歌词/字幕时快速定位到已处理的最新进度。</li>
+                </ul>
+
+                <h3>🗑️ 删除选中行</h3>
+                <ul>
+                    <li>勾选需要删除的行（支持多选），点击「<strong>🗑️ 删除选中行</strong>」按钮，确认后删除。</li>
+                    <li>删除后剩余行号自动重新排序，“最新时间戳”同步更新。</li>
+                    <li>支持 <span class="tag">Ctrl+Z</span> 撤销删除。</li>
+                </ul>
+
+                <h3>🧹 清除时间戳</h3>
+                <ul>
+                    <li>勾选需要清除时间戳的行，点击「<strong>🧹 清除时间戳</strong>」按钮，清空选中行的所有时间信息（LRC清空时间，SRT清空开始/结束）。</li>
+                    <li>不影响未选中的行，“最新时间戳”自动重算。</li>
+                </ul>
+
+                <h3>🔄 撤销 / 重做</h3>
+                <ul>
+                    <li>适用于 <strong>更新时间戳</strong>、<strong>清除时间戳</strong>、<strong>删除选中行</strong> 三类操作。</li>
+                    <li>最多保存最近 <strong>10 步</strong>，快捷键 <span class="tag">Ctrl+Z</span> 撤销，<span class="tag">Ctrl+Y</span> 重做。</li>
+                    <li>撤销/重做后，自动选中第一个未完成的时间戳行（LRC模式为 <code>time</code> 为空或0；SRT模式为 <code>start</code> 或 <code>end</code> 为空或0），并滚动到可视区域，方便您继续编辑。</li>
+                </ul>
+
+                <h3>▶️ 预览功能</h3>
+                <ul>
+                    <li>点击「<strong>▶ 预览</strong>」按钮，从<strong>当前游标位置</strong>开始播放，歌词/字幕行随播放进度<strong>自动高亮并滚动</strong>到可视区域。</li>
+                    <li><strong>中英文歌词/字幕</strong>：若勾选「中英文歌词/字幕」复选框，预览时优先高亮<strong>第一行</strong>（通常为中文）；取消勾选则高亮<strong>最后一行</strong>（默认）。</li>
+                    <li>再次点击「预览」按钮可<strong>停止预览</strong>并暂停音频；播放结束后预览自动退出。</li>
+                    <li>预览过程中您仍可拖拽波形或点击列表项，高亮会跟随当前位置。</li>
+                    <li><em>提示：预览模式下点击「暂停」按钮会暂停播放，但预览高亮保持；如需完全停止预览请再次点击「预览」按钮。</em></li>
+                </ul>
+
+                <h3>↔️ 对齐切换</h3>
+                <ul>
+                    <li>工具栏中新增 <strong>「左对齐」/「居中」</strong> 切换按钮，控制歌词/字幕文本的水平对齐方式。</li>
+                    <li>状态自动保存，刷新页面后保持上次选择。</li>
+                </ul>
+
+                <h3>🖱️ 滚轮控制</h3>
+                <ul>
+                    <li>暂停状态下，鼠标滚轮可<strong>前后移动播放头</strong>，波形随之滚动（播放头居中）。</li>
+                    <li>滚动速度可通过工具栏的「滚速」调节器实时调整（0.1 ~ 5.0 秒）。</li>
+                    <li>播放时滚轮无效，波形自动跟随播放头。</li>
+                </ul>
+
+                <h3>⌨️ 快捷键</h3>
+                <table class="shortcut-table">
+                    <tr><td>Enter</td><td>打开添加对话框（焦点不在输入框时）</td></tr>
+                    <tr><td>Space</td><td>播放/暂停（默认）/ 更新时间戳（配置中勾选后）</td></tr>
+                    <tr><td>← →</td><td>步进移动播放头（步长可调）</td></tr>
+                    <tr><td>Ctrl+←</td><td>定位到左边界（波形左边界按钮）</td></tr>
+                    <tr><td>Ctrl+→</td><td>定位到右边界（波形右边界按钮）</td></tr>
+                    <tr><td>↑ ↓</td><td>增加/减少步长（每次 50ms）</td></tr>
+                    <tr><td>Ctrl+Z</td><td>撤销时间戳/删除操作</td></tr>
+                    <tr><td>Ctrl+Y</td><td>重做时间戳/删除操作</td></tr>
+                </table>
+
+                <h3>📂 导入与导出</h3>
+                <ul>
+                    <li><strong>导入</strong>：点击「📄 导入歌词/字幕」支持 <code>.txt</code> / <code>.lrc</code> / <code>.srt</code>，或直接拖拽文件到页面。</li>
+                    <li><strong>导出</strong>：点击「💾 导出」可选择 <strong>TXT</strong>（内容跟随当前模式）/ <strong>LRC</strong> / <strong>SRT</strong>，调用系统另存为。</li>
+                    <li><strong>SRT导出筛选</strong>：导出SRT时，可选择「全部导出」「导出单数行」「导出双数行」，方便分离中英文双语字幕。</li>
+                </ul>
+
+                <h3>🎨 其他小功能</h3>
+                <ul>
+                    <li><strong>最新时间戳</strong>：实时显示最后一次更新的时间，清除/删除后自动重算。</li>
+                    <li><strong>深色模式</strong>：点击右上角月亮/太阳图标切换，偏好自动保存。</li>
+                    <li><strong>缩放</strong>：工具栏「+/-」调节波形显示密度。</li>
+                    <li><strong>悬停游标</strong>：鼠标移到波形区域时，显示淡红色竖线预览落点位置。</li>
+                    <li><strong>空格键更新时间戳</strong>：在 <strong>⚙️ 配置</strong> 中勾选后，按空格键不再控制播放/暂停，而是执行更新时间戳操作。</li>
+                </ul>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="closeHelp">我知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 列表容器 ===== -->
+    <div class="markers-container">
+        <div class="markers-header">
+            <span class="title">
+                <span class="select-all-wrapper" id="selectAllWrapper">
+                    <input type="checkbox" id="selectAllCheck" />
+                    <span>全选</span>
+                </span>
+                <span class="icon">📌</span>
+                <span>歌词/字幕列表</span>
+            </span>
+            <span class="count" id="markerCount">0 条</span>
+        </div>
+        <div class="marker-list" id="markerList"></div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- ===== WaveSurfer（内联完整压缩库） ===== -->
+    <script>
+        // ===== WaveSurfer 压缩库（完整代码，来自原文件）=====
+        !function(t,e){"object"==typeof exports&&"undefined"!=typeof module?module.exports=e():"function"==typeof define&&define.amd?define(e):(t="undefined"!=typeof globalThis?globalThis:t||self).WaveSurfer=e()}(this,(function(){"use strict";function t(t,e,i,n){return new(i||(i=Promise))((function(s,r){function o(t){try{l(n.next(t))}catch(t){r(t)}}function a(t){try{l(n.throw(t))}catch(t){r(t)}}function l(t){var e;t.done?s(t.value):(e=t.value,e instanceof i?e:new i((function(t){t(e)}))).then(o,a)}l((n=n.apply(t,e||[])).next())}))}"function"==typeof SuppressedError&&SuppressedError;class e{constructor(){this.listeners={}}on(t,e,i){if(this.listeners[t]||(this.listeners[t]=new Set),null==i?void 0:i.once){const i=(...n)=>{this.un(t,i),e(...n)};return this.listeners[t].add(i),()=>this.un(t,i)}return this.listeners[t].add(e),()=>this.un(t,e)}un(t,e){var i;null===(i=this.listeners[t])||void 0===i||i.delete(e)}once(t,e){return this.on(t,e,{once:!0})}unAll(){this.listeners={}}emit(t,...e){this.listeners[t]&&this.listeners[t].forEach((t=>t(...e)))}}const i={decode:function(e,i){return t(this,void 0,void 0,(function*(){const t=new AudioContext({sampleRate:i});try{return yield t.decodeAudioData(e)}finally{t.close()}}))},createBuffer:function(t,e){if(!t||0===t.length)throw new Error("channelData must be a non-empty array");if(e<=0)throw new Error("duration must be greater than 0");if("number"==typeof t[0]&&(t=[t]),!t[0]||0===t[0].length)throw new Error("channelData must contain non-empty channel arrays");!function(t){const e=t[0];if(e.some((t=>t>1||t<-1))){const i=e.length;let n=0;for(let t=0;t<i;t++){const i=Math.abs(e[t]);i>n&&(n=i)}for(const e of t)for(let t=0;t<i;t++)e[t]/=n}}(t);const i=t.map((t=>t instanceof Float32Array?t:Float32Array.from(t)));return{duration:e,length:i[0].length,sampleRate:i[0].length/e,numberOfChannels:i.length,getChannelData:t=>{const e=i[t];if(!e)throw new Error(`Channel ${t} not found`);return e},copyFromChannel:AudioBuffer.prototype.copyFromChannel,copyToChannel:AudioBuffer.prototype.copyToChannel}}};function n(t,e){const i=e.xmlns?document.createElementNS(e.xmlns,t):document.createElement(t);for(const[s,r]of Object.entries(e))if("children"===s&&r)for(const[t,e]of Object.entries(r))e instanceof Node?i.appendChild(e):"string"==typeof e?i.appendChild(document.createTextNode(e)):i.appendChild(n(t,e));else"style"===s?Object.assign(i.style,r):"textContent"===s?i.textContent=r:i.setAttribute(s,r.toString());return i}function s(t,e,i){const s=n(t,e||{});return null==i||i.appendChild(s),s}function r(t){return t instanceof HTMLElement||"object"==typeof t&&null!==t&&t.nodeType===Node.ELEMENT_NODE&&"object"==typeof t.style}var o=Object.freeze({__proto__:null,createElement:s,default:s,isHTMLElement:r});const a={fetchBlob:function(e,i,n){return t(this,void 0,void 0,(function*(){var s;const r=yield fetch(e,n);if(r.status>=400)throw new Error(`Failed to fetch ${e}: ${r.status} (${r.statusText})`);return function(e,i,n){t(this,void 0,void 0,(function*(){var t;if(!e.body||!e.headers)return;const s=e.body.getReader(),r=Number(e.headers.get("Content-Length"))||0;let o=0;const a=()=>{s.cancel()};if(n){if(n.aborted)return void s.cancel();n.addEventListener("abort",a,{once:!0})}try{for(;;){const e=yield s.read();if(e.done)break;if(o+=(null===(t=e.value)||void 0===t?void 0:t.length)||0,r>0){const t=Math.round(o/r*100);i(t)}}}catch(t){if(t instanceof DOMException&&"AbortError"===t.name)return;console.warn("Progress tracking error:",t)}finally{n&&n.removeEventListener("abort",a)}}))}(r.clone(),i,null!==(s=null==n?void 0:n.signal)&&void 0!==s?s:void 0),r.blob()}))}};function l(t){let e=t;const i=new Set;return{get value(){return e},set(t){Object.is(e,t)||(e=t,i.forEach((t=>t(e))))},update(t){this.set(t(e))},subscribe:t=>(i.add(t),()=>i.delete(t))}}function h(t,e){const i=l(t());return e.forEach((e=>e.subscribe((()=>{const e=t();Object.is(i.value,e)||i.set(e)})))),{get value(){return i.value},subscribe:t=>i.subscribe(t)}}function c(t,e){let i;const n=()=>{i&&(i(),i=void 0),i=t()},s=e.map((t=>t.subscribe(n)));return n(),()=>{i&&(i(),i=void 0),s.forEach((t=>t()))}}class u extends e{get isPlayingSignal(){return this._isPlaying}get currentTimeSignal(){return this._currentTime}get durationSignal(){return this._duration}get volumeSignal(){return this._volume}get mutedSignal(){return this._muted}get playbackRateSignal(){return this._playbackRate}get seekingSignal(){return this._seeking}constructor(t){super(),this.isExternalMedia=!1,this._ownBlobUrl=null,this.reactiveMediaEventCleanups=[],t.media?(this.media=t.media,this.isExternalMedia=!0):this.media=document.createElement("audio"),this._isPlaying=l(!1),this._currentTime=l(0),this._duration=l(0),this._volume=l(this.media.volume),this._muted=l(this.media.muted),this._playbackRate=l(this.media.playbackRate||1),this._seeking=l(!1),this.setupReactiveMediaEvents(),t.mediaControls&&(this.media.controls=!0),t.autoplay&&(this.media.autoplay=!0),null!=t.playbackRate&&this.onMediaEvent("canplay",(()=>{null!=t.playbackRate&&(this.media.playbackRate=t.playbackRate)}),{once:!0})}setupReactiveMediaEvents(){this.reactiveMediaEventCleanups.push(this.onMediaEvent("play",(()=>{this._isPlaying.set(!0)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("pause",(()=>{this._isPlaying.set(!1)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("ended",(()=>{this._isPlaying.set(!1)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("timeupdate",(()=>{this._currentTime.set(this.media.currentTime)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("durationchange",(()=>{this._duration.set(this.media.duration||0)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("loadedmetadata",(()=>{this._duration.set(this.media.duration||0)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("seeking",(()=>{this._seeking.set(!0)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("seeked",(()=>{this._seeking.set(!1)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("volumechange",(()=>{this._volume.set(this.media.volume),this._muted.set(this.media.muted)}))),this.reactiveMediaEventCleanups.push(this.onMediaEvent("ratechange",(()=>{this._playbackRate.set(this.media.playbackRate)})))}onMediaEvent(t,e,i){return this.media.addEventListener(t,e,i),()=>this.media.removeEventListener(t,e,i)}getSrc(){return this.media.currentSrc||this.media.src||""}revokeSrc(){this._ownBlobUrl&&(URL.revokeObjectURL(this._ownBlobUrl),this._ownBlobUrl=null)}canPlayType(t){return""!==this.media.canPlayType(t)}setSrc(t,e){const i=this.getSrc();if(t&&i===t)return;this.revokeSrc();const n=e instanceof Blob&&(this.canPlayType(e.type)||!t)?URL.createObjectURL(e):t;if(n!==t&&(this._ownBlobUrl=n),i&&this.media.removeAttribute("src"),n||t)try{this.media.src=n}catch(e){this.media.src=t}}destroy(){this.reactiveMediaEventCleanups.forEach((t=>t())),this.reactiveMediaEventCleanups=[],this.revokeSrc(),this.unAll(),this.isExternalMedia||(this.media.pause(),this.media.removeAttribute("src"),this.media.load(),this.media.remove())}setMediaElement(t){this.reactiveMediaEventCleanups.forEach((t=>t())),this.reactiveMediaEventCleanups=[],this.media=t,this.setupReactiveMediaEvents()}play(){return t(this,void 0,void 0,(function*(){try{return yield this.media.play()}catch(t){if(t instanceof DOMException&&"AbortError"===t.name)return;throw t}}))}pause(){this.media.pause()}isPlaying(){return!this.media.paused&&!this.media.ended}setTime(t){this.media.currentTime=Math.max(0,Math.min(t,this.getDuration()))}getDuration(){return this.media.duration}getCurrentTime(){return this.media.currentTime}getVolume(){return this.media.volume}setVolume(t){this.media.volume=t}getMuted(){return this.media.muted}setMuted(t){this.media.muted=t}getPlaybackRate(){return this.media.playbackRate}isSeeking(){return this.media.seeking}setPlaybackRate(t,e){null!=e&&(this.media.preservesPitch=e),this.media.playbackRate=t}getMediaElement(){return this.media}setSinkId(t){return this.media.setSinkId(t)}}function d({maxTop:t,maxBottom:e,halfHeight:i,vScale:n,barMinHeight:s=0,barAlign:r}){let o=Math.round(t*i*n);let a=o+Math.round(e*i*n)||1;return a<s&&(a=s,r||(o=a/2)),{topHeight:o,totalHeight:a}}function p({barAlign:t,halfHeight:e,topHeight:i,totalHeight:n,canvasHeight:s}){return"top"===t?0:"bottom"===t?s-n:e-i}function m(t,e,i){const n=e-t.left,s=i-t.top;return[n/t.width,s/t.height]}function f(t){return Boolean(t.barWidth||t.barGap||t.barAlign)}function g(t,e){if(!f(e))return t;const i=e.barWidth||.5,n=i+(e.barGap||i/2);return 0===n?t:Math.floor(t/n)*n}function v({scrollLeft:t,totalWidth:e,numCanvases:i}){if(0===e)return[0];const n=t/e,s=Math.floor(n*i);return[s-1,s,s+1]}function b(t){const e=t._cleanup;"function"==typeof e&&e()}function y(t){const e=l({scrollLeft:t.scrollLeft,scrollWidth:t.scrollWidth,clientWidth:t.clientWidth}),i=h((()=>function(t){const{scrollLeft:e,scrollWidth:i,clientWidth:n}=t;if(0===i)return{startX:0,endX:1};const s=e/i,r=(e+n)/i;return{startX:Math.max(0,Math.min(1,s)),endX:Math.max(0,Math.min(1,r))}}(e.value)),[e]),n=h((()=>function(t){return{left:t.scrollLeft,right:t.scrollLeft+t.clientWidth}}(e.value)),[e]),s=()=>{e.set({scrollLeft:t.scrollLeft,scrollWidth:t.scrollWidth,clientWidth:t.clientWidth})};t.addEventListener("scroll",s,{passive:!0});return{scrollData:e,percentages:i,bounds:n,cleanup:()=>{t.removeEventListener("scroll",s),b(e)}}}class C extends e{constructor(t,e){super(),this.timeouts=[],this.isScrollable=!1,this.audioData=null,this.resizeObserver=null,this.lastContainerWidth=0,this.isDragging=!1,this.subscriptions=[],this.unsubscribeOnScroll=[],this.dragStream=null,this.scrollStream=null,this.containerInlinePadding=0,this.onClickWrapper=t=>{const e=this.wrapper.getBoundingClientRect(),[i,n]=m(e,t.clientX,t.clientY);this.emit("click",i,n)},this.onDblClickWrapper=t=>{const e=this.wrapper.getBoundingClientRect(),[i,n]=m(e,t.clientX,t.clientY);this.emit("dblclick",i,n)},this.subscriptions=[],this.options=t;const i=this.parentFromOptionsContainer(t.container);this.parent=i;const[n,s]=this.initHtml();i.appendChild(n),this.container=n,this.scrollContainer=s.querySelector(".scroll"),this.wrapper=s.querySelector(".wrapper"),this.canvasWrapper=s.querySelector(".canvases"),this.progressWrapper=s.querySelector(".progress"),this.cursor=s.querySelector(".cursor"),this.calculateInlinePadding(),e&&s.appendChild(e),this.initEvents()}parentFromOptionsContainer(t){let e;if("string"==typeof t?e=document.querySelector(t):r(t)&&(e=t),!e)throw new Error("Container not found");return e}initEvents(){this.wrapper.addEventListener("click",this.onClickWrapper),this.wrapper.addEventListener("dblclick",this.onDblClickWrapper),!0!==this.options.dragToSeek&&"object"!=typeof this.options.dragToSeek||this.initDrag(),this.scrollStream=y(this.scrollContainer);const t=c((()=>{const{startX:t,endX:e}=this.scrollStream.percentages.value,{left:i,right:n}=this.scrollStream.bounds.value;this.emit("scroll",t,e,i,n)}),[this.scrollStream.percentages,this.scrollStream.bounds]);if(this.subscriptions.push(t),"function"==typeof ResizeObserver){const t=this.createDelay(100);this.resizeObserver=new ResizeObserver((()=>{t().then((()=>this.onContainerResize())).catch((()=>{}))})),this.resizeObserver.observe(this.scrollContainer)}}onContainerResize(){const t=this.parent.clientWidth;this.calculateInlinePadding(),t===this.lastContainerWidth&&"auto"!==this.options.height||(this.lastContainerWidth=t,this.reRender(),this.emit("resize"))}initDrag(){if(this.dragStream)return;this.dragStream=function(t,e={}){const{threshold:i=3,mouseButton:n=0,touchDelay:s=100}=e,r=l(null),o=new Map,a=matchMedia("(pointer: coarse)").matches;let h=()=>{};const c=e=>{if(e.button!==n)return;if(o.has(e.pointerId))return;if(o.set(e.pointerId,e),o.size>1)return;const l=e.pointerId;let c=e.clientX,u=e.clientY,d=!1;const p=Date.now(),m=t.getBoundingClientRect(),{left:f,top:g}=m,v=t=>{if(t.pointerId!==l)return;if(t.defaultPrevented||o.size>1)return;if(a&&Date.now()-p<s)return;const e=t.clientX,n=t.clientY,h=e-c,m=n-u;(d||Math.abs(h)>i||Math.abs(m)>i)&&(t.preventDefault(),t.stopPropagation(),d||(r.set({type:"start",x:c-f,y:u-g}),d=!0),r.set({type:"move",x:e-f,y:n-g,deltaX:h,deltaY:m}),c=e,u=n)},b=t=>{if(o.delete(t.pointerId)){if(t.pointerId===l&&d){const e=t.clientX,i=t.clientY;r.set({type:"end",x:e-f,y:i-g})}0===o.size&&h()}},y=t=>{t.relatedTarget&&t.relatedTarget!==document.documentElement||b(t)},C=t=>{d&&(t.stopPropagation(),t.preventDefault())},S=t=>{t.defaultPrevented||o.size>1||d&&t.preventDefault()};document.addEventListener("pointermove",v),document.addEventListener("pointerup",b),document.addEventListener("pointerout",y),document.addEventListener("pointercancel",y),document.addEventListener("touchmove",S,{passive:!1}),document.addEventListener("click",C,{capture:!0}),h=()=>{document.removeEventListener("pointermove",v),document.removeEventListener("pointerup",b),document.removeEventListener("pointerout",y),document.removeEventListener("pointercancel",y),document.removeEventListener("touchmove",S),setTimeout((()=>{document.removeEventListener("click",C,{capture:!0})}),10)}};return t.addEventListener("pointerdown",c),{signal:r,cleanup:()=>{h(),t.removeEventListener("pointerdown",c),o.clear(),b(r)}}}(this.wrapper);const t=c((()=>{const t=this.dragStream.signal.value;if(!t)return;const e=this.wrapper.getBoundingClientRect().width,i=(n=t.x/e)<0?0:n>1?1:n;var n;"start"===t.type?(this.isDragging=!0,this.emit("dragstart",i)):"move"===t.type?this.emit("drag",i):"end"===t.type&&(this.isDragging=!1,this.emit("dragend",i))}),[this.dragStream.signal]);this.subscriptions.push(t)}calculateInlinePadding(){const{paddingLeft:t,paddingRight:e}=getComputedStyle(this.scrollContainer),i=parseFloat(t)+parseFloat(e);this.containerInlinePadding=Number.isNaN(i)?0:i}initHtml(){const t=document.createElement("div"),e=t.attachShadow({mode:"open"}),i=this.options.cspNonce&&"string"==typeof this.options.cspNonce?this.options.cspNonce.replace(/"/g,""):"";return e.innerHTML=`\n      <style${i?` nonce="${i}"`:""}>\n        :host {\n          user-select: none;\n          min-width: 1px;\n        }\n        :host audio {\n          display: block;\n          width: 100%;\n        }\n        :host .scroll {\n          overflow-x: auto;\n          overflow-y: hidden;\n          width: 100%;\n          position: relative;\n        }\n        :host .noScrollbar {\n          scrollbar-color: transparent;\n          scrollbar-width: none;\n        }\n        :host .noScrollbar::-webkit-scrollbar {\n          display: none;\n          -webkit-appearance: none;\n        }\n        :host .wrapper {\n          position: relative;\n          overflow: visible;\n          z-index: 2;\n        }\n        :host .canvases {\n          min-height: ${this.getHeight(this.options.height,this.options.splitChannels)}px;\n          pointer-events: none;\n        }\n        :host .canvases > div {\n          position: relative;\n        }\n        :host canvas {\n          display: block;\n          position: absolute;\n          top: 0;\n          image-rendering: pixelated;\n        }\n        :host .progress {\n          pointer-events: none;\n          position: absolute;\n          z-index: 2;\n          top: 0;\n          left: 0;\n          width: 0;\n          height: 100%;\n          overflow: hidden;\n        }\n        :host .progress > div {\n          position: relative;\n        }\n        :host .cursor {\n          pointer-events: none;\n          position: absolute;\n          z-index: 5;\n          top: 0;\n          left: 0;\n          height: 100%;\n          border-radius: 2px;\n        }\n      </style>\n\n      <div class="scroll" part="scroll">\n        <div class="wrapper" part="wrapper">\n          <div class="canvases" part="canvases"></div>\n          <div class="progress" part="progress"></div>\n          <div class="cursor" part="cursor"></div>\n        </div>\n      </div>\n    `,[t,e]}setOptions(t){var e;if(this.options.container!==t.container){const e=this.parentFromOptionsContainer(t.container);e.appendChild(this.container),this.parent=e}!0===t.dragToSeek||"object"==typeof this.options.dragToSeek?this.initDrag():(null===(e=this.dragStream)||void 0===e||e.cleanup(),this.dragStream=null),this.options=t,this.reRender()}getWrapper(){return this.wrapper}getWidth(){return this.scrollContainer.clientWidth-this.containerInlinePadding}getScroll(){return this.scrollContainer.scrollLeft}setScroll(t){this.scrollContainer.scrollLeft=t}setScrollPercentage(t){const{scrollWidth:e}=this.scrollContainer,i=e*t;this.setScroll(i)}destroy(){var t;this.wrapper.removeEventListener("click",this.onClickWrapper),this.wrapper.removeEventListener("dblclick",this.onDblClickWrapper),this.timeouts.forEach((t=>t())),this.timeouts=[],this.subscriptions.forEach((t=>t())),this.container.remove(),this.resizeObserver&&(this.resizeObserver.disconnect(),this.resizeObserver=null),null===(t=this.unsubscribeOnScroll)||void 0===t||t.forEach((t=>t())),this.unsubscribeOnScroll=[],this.dragStream&&(this.dragStream.cleanup(),this.dragStream=null),this.scrollStream&&(this.scrollStream.cleanup(),this.scrollStream=null)}createDelay(t=10){let e,i;const n=()=>{e&&(clearTimeout(e),e=void 0),i&&(i(),i=void 0)};return this.timeouts.push(n),()=>new Promise(((s,r)=>{n(),i=r,e=setTimeout((()=>{e=void 0,i=void 0,s()}),t)}))}getHeight(t,e){var i;const n=(null===(i=this.audioData)||void 0===i?void 0:i.numberOfChannels)||1;return function({optionsHeight:t,optionsSplitChannels:e,parentHeight:i,numberOfChannels:n,defaultHeight:s=128}){if(null==t)return s;const r=Number(t);if(!isNaN(r))return r;if("auto"===t){const t=i||s;return(null==e?void 0:e.every((t=>!t.overlay)))?t/n:t}return s}({optionsHeight:t,optionsSplitChannels:e,parentHeight:this.parent.clientHeight,numberOfChannels:n,defaultHeight:128})}convertColorValues(t,e){return function(t,e,i){if(!Array.isArray(t))return t||"";if(0===t.length)return"#999";if(t.length<2)return t[0]||"";const n=document.createElement("canvas"),s=n.getContext("2d");if(!s)return t[0]||"";const r=i||n.height*e,o=s.createLinearGradient(0,0,0,r),a=1/(t.length-1);return t.forEach(((t,e)=>{o.addColorStop(e*a,t)})),o}(t,this.getPixelRatio(),null==e?void 0:e.canvas.height)}getPixelRatio(){return t=window.devicePixelRatio,Math.max(1,t||1);var t}renderBarWaveform(t,e,i,n){const{width:s,height:r}=i.canvas,{halfHeight:o,barWidth:a,barRadius:l,barIndexScale:h,barSpacing:c,barMinHeight:u}=function({width:t,height:e,length:i,options:n,pixelRatio:s}){const r=e/2,o=n.barWidth?n.barWidth*s:1,a=n.barGap?n.barGap*s:n.barWidth?o/2:0,l=o+a||1;return{halfHeight:r,barWidth:o,barGap:a,barRadius:n.barRadius||0,barMinHeight:n.barMinHeight?n.barMinHeight*s:0,barIndexScale:i>0?t/l/i:0,barSpacing:l}}({width:s,height:r,length:(t[0]||[]).length,options:e,pixelRatio:this.getPixelRatio()}),m=function({channelData:t,barIndexScale:e,barSpacing:i,barWidth:n,halfHeight:s,vScale:r,canvasHeight:o,barAlign:a,barMinHeight:l}){const h=t[0]||[],c=t[1]||h,u=h.length,m=[];let f=0,g=0,v=0;for(let t=0;t<=u;t++){const u=Math.round(t*e);if(u>f){const{topHeight:t,totalHeight:e}=d({maxTop:g,maxBottom:v,halfHeight:s,vScale:r,barMinHeight:l,barAlign:a}),h=p({barAlign:a,halfHeight:s,topHeight:t,totalHeight:e,canvasHeight:o});m.push({x:f*i,y:h,width:n,height:e}),f=u,g=0,v=0}const b=Math.abs(h[t]||0),y=Math.abs(c[t]||0);b>g&&(g=b),y>v&&(v=y)}return m}({channelData:t,barIndexScale:h,barSpacing:c,barWidth:a,halfHeight:o,vScale:n,canvasHeight:r,barAlign:e.barAlign,barMinHeight:u});i.beginPath();for(const t of m)l&&"roundRect"in i?i.roundRect(t.x,t.y,t.width,t.height,l):i.rect(t.x,t.y,t.width,t.height);i.fill(),i.closePath()}renderLineWaveform(t,e,i,n){const{width:s,height:r}=i.canvas,o=function({channelData:t,width:e,height:i,vScale:n}){const s=i/2,r=t[0]||[];return[r,t[1]||r].map(((t,i)=>{const r=t.length,o=r?e/r:0,a=s,l=0===i?-1:1,h=[{x:0,y:a}];let c=0,u=0;for(let e=0;e<=r;e++){const i=Math.round(e*o);if(i>c){const t=a+(Math.round(u*s*n)||1)*l;h.push({x:c,y:t}),c=i,u=0}const r=Math.abs(t[e]||0);r>u&&(u=r)}return h.push({x:c,y:a}),h}))}({channelData:t,width:s,height:r,vScale:n});i.beginPath();for(const t of o)if(t.length){i.moveTo(t[0].x,t[0].y);for(let e=1;e<t.length;e++){const n=t[e];i.lineTo(n.x,n.y)}}i.fill(),i.closePath()}renderWaveform(t,e,i){if(i.fillStyle=this.convertColorValues(e.waveColor,i),e.renderFunction)return void e.renderFunction(t,i);const n=function({channelData:t,barHeight:e,normalize:i,maxPeak:n}){var s;const r=e||1;if(!i)return r;const o=t[0];if(!o||0===o.length)return r;let a=null!=n?n:0;if(!n)for(let t=0;t<o.length;t++){const e=null!==(s=o[t])&&void 0!==s?s:0,i=Math.abs(e);i>a&&(a=i)}return a?r/a:r}({channelData:t,barHeight:e.barHeight,normalize:e.normalize,maxPeak:e.maxPeak});f(e)?this.renderBarWaveform(t,e,i,n):this.renderLineWaveform(t,e,i,n)}renderSingleCanvas(t,e,i,n,s,r,o){const a=this.getPixelRatio(),l=document.createElement("canvas");l.width=Math.round(i*a),l.height=Math.round(n*a),l.style.width=`${i}px`,l.style.height=`${n}px`,l.style.left=`${Math.round(s)}px`,r.appendChild(l);const h=l.getContext("2d");if(e.renderFunction?(h.fillStyle=this.convertColorValues(e.waveColor,h),e.renderFunction(t,h)):this.renderWaveform(t,e,h),l.width>0&&l.height>0){const t=l.cloneNode(),i=t.getContext("2d");i.drawImage(l,0,0),i.globalCompositeOperation="source-in",i.fillStyle=this.convertColorValues(e.progressColor,i),i.fillRect(0,0,l.width,l.height),o.appendChild(t)}}renderMultiCanvas(t,e,i,n,s,r){const o=this.getPixelRatio(),{clientWidth:a}=this.scrollContainer,l=i/o,h=function({clientWidth:t,totalWidth:e,options:i}){return g(Math.min(8e3,t,e),i)}({clientWidth:a,totalWidth:l,options:e});let c={};if(0===h)return;const u=i=>{if(i<0||i>=d)return;if(c[i])return;c[i]=!0;const o=i*h;let a=Math.min(l-o,h);if(a=g(a,e),a<=0)return;const u=function({channelData:t,offset:e,clampedWidth:i,totalWidth:n}){return t.map((t=>{const s=Math.floor(e/n*t.length),r=Math.floor((e+i)/n*t.length);return t.slice(s,r)}))}({channelData:t,offset:o,clampedWidth:a,totalWidth:l});this.renderSingleCanvas(u,e,a,n,o,s,r)},d=Math.ceil(l/h);if(!this.isScrollable){for(let t=0;t<d;t++)u(t);return}if(v({scrollLeft:this.scrollContainer.scrollLeft,totalWidth:l,numCanvases:d}).forEach((t=>u(t))),d>1){const t=this.on("scroll",(()=>{const{scrollLeft:t}=this.scrollContainer;Object.keys(c).length>10&&(s.innerHTML="",r.innerHTML="",c={}),v({scrollLeft:t,totalWidth:l,numCanvases:d}).forEach((t=>u(t)))}));this.unsubscribeOnScroll.push(t)}}renderChannel(t,e,i,n){var{overlay:s}=e,r=function(t,e){var i={};for(var n in t)Object.prototype.hasOwnProperty.call(t,n)&&e.indexOf(n)<0&&(i[n]=t[n]);if(null!=t&&"function"==typeof Object.getOwnPropertySymbols){var s=0;for(n=Object.getOwnPropertySymbols(t);s<n.length;s++)e.indexOf(n[s])<0&&Object.prototype.propertyIsEnumerable.call(t,n[s])&&(i[n[s]]=t[n[s]])}return i}(e,["overlay"]);const o=document.createElement("div"),a=this.getHeight(r.height,r.splitChannels);o.style.height=`${a}px`,s&&n>0&&(o.style.marginTop=`-${a}px`),this.canvasWrapper.style.minHeight=`${a}px`,this.canvasWrapper.appendChild(o);const l=o.cloneNode();this.progressWrapper.appendChild(l),this.renderMultiCanvas(t,r,i,a,o,l)}render(e){return t(this,void 0,void 0,(function*(){var t;this.timeouts.forEach((t=>t())),this.timeouts=[],this.unsubscribeOnScroll.forEach((t=>t())),this.unsubscribeOnScroll=[],this.canvasWrapper.innerHTML="",this.progressWrapper.innerHTML="",null!=this.options.width&&(this.scrollContainer.style.width="number"==typeof this.options.width?`${this.options.width}px`:this.options.width);const i=this.getPixelRatio(),n=this.scrollContainer.clientWidth-this.containerInlinePadding,{scrollWidth:s,isScrollable:r,useParentWidth:o,width:a}=function({duration:t,minPxPerSec:e=0,parentWidth:i,fillParent:n,pixelRatio:s}){const r=Math.ceil(t*e),o=r>i,a=Boolean(n&&!o);return{scrollWidth:r,isScrollable:o,useParentWidth:a,width:(a?i:r)*s}}({duration:e.duration,minPxPerSec:this.options.minPxPerSec||0,parentWidth:n,fillParent:this.options.fillParent,pixelRatio:i});if(this.isScrollable=r,this.wrapper.style.width=o?"100%":`${s}px`,this.scrollContainer.style.overflowX=this.isScrollable?"auto":"hidden",this.scrollContainer.classList.toggle("noScrollbar",!!this.options.hideScrollbar),this.cursor.style.backgroundColor=`${this.options.cursorColor||this.options.progressColor}`,this.cursor.style.width=`${this.options.cursorWidth}px`,this.audioData=e,this.emit("render"),this.options.splitChannels)for(let i=0;i<e.numberOfChannels;i++){const n=Object.assign(Object.assign({},this.options),null===(t=this.options.splitChannels)||void 0===t?void 0:t[i]);this.renderChannel([e.getChannelData(i)],n,a,i)}else{const t=[e.getChannelData(0)];e.numberOfChannels>1&&t.push(e.getChannelData(1)),this.renderChannel(t,this.options,a,0)}Promise.resolve().then((()=>this.emit("rendered")))}))}reRender(){if(this.unsubscribeOnScroll.forEach((t=>t())),this.unsubscribeOnScroll=[],!this.audioData)return;const{scrollWidth:t}=this.scrollContainer,{right:e}=this.progressWrapper.getBoundingClientRect();if(this.render(this.audioData),!this.isScrollable&&this.scrollContainer.scrollLeft)this.scrollContainer.scrollLeft=0;else if(this.isScrollable&&t!==this.scrollContainer.scrollWidth){const{right:t}=this.progressWrapper.getBoundingClientRect(),i=function(t){const e=2*t;return(e<0?Math.floor(e):Math.ceil(e))/2}(t-e);this.scrollContainer.scrollLeft+=i}}zoom(t){this.options.minPxPerSec=t,this.reRender()}scrollIntoView(t,e=!1){var i;const{scrollLeft:n,scrollWidth:s,clientWidth:r}=this.scrollContainer,o=t*s,a=n,l=n+r,h=r/2;if(this.isDragging){const t=30;o+t>l?this.scrollContainer.scrollLeft+=t:o-t<a&&(this.scrollContainer.scrollLeft-=t)}else{(o<a||o>l)&&(this.scrollContainer.scrollLeft=o-(this.options.autoCenter?h:0));const t=o-n-h;if(e&&this.options.autoCenter&&t>0){const e=null===(i=this.audioData)||void 0===i?void 0:i.duration;if(void 0===e||e<=0)return void(this.scrollContainer.scrollLeft+=t);const n=s/e;this.scrollContainer.scrollLeft+=n<=600?Math.min(t,10):t}}}renderProgress(t,e){if(isNaN(t))return;const i=100*t;this.canvasWrapper.style.clipPath=`polygon(${i}% 0%, 100% 0%, 100% 100%, ${i}% 100%)`,this.progressWrapper.style.width=`${i}%`,this.cursor.style.left=`${i}%`,this.cursor.style.transform=this.options.cursorWidth?`translateX(-${t*this.options.cursorWidth}px)`:"",this.isScrollable&&this.options.autoScroll&&this.audioData&&this.audioData.duration>0&&this.scrollIntoView(t,e)}exportImage(e,i,n){return t(this,void 0,void 0,(function*(){const t=this.canvasWrapper.querySelectorAll("canvas");if(!t.length)throw new Error("No waveform data");if("dataURL"===n){const n=Array.from(t).map((t=>t.toDataURL(e,i)));return Promise.resolve(n)}return Promise.all(Array.from(t).map((t=>new Promise(((n,s)=>{t.toBlob((t=>{t?n(t):s(new Error("Could not export image"))}),e,i)})))))}))}}class S extends e{constructor(){super(...arguments),this.animationFrameId=null,this.isRunning=!1}start(){if(this.isRunning)return;this.isRunning=!0;const t=()=>{this.isRunning&&(this.emit("tick"),this.animationFrameId=requestAnimationFrame(t))};t()}stop(){this.isRunning=!1,null!==this.animationFrameId&&(cancelAnimationFrame(this.animationFrameId),this.animationFrameId=null)}destroy(){this.stop(),this.unAll()}}class E extends e{constructor(t){super(),this.bufferNode=null,this.playStartTime=0,this.playbackPosition=0,this._muted=!1,this._playbackRate=1,this._duration=void 0,this.buffer=null,this.currentSrc="",this.paused=!0,this.crossOrigin=null,this.seeking=!1,this.autoplay=!1,this.addEventListener=this.on,this.removeEventListener=this.un,this._destroyed=!1,function(){const t=globalThis.navigator;if(null==t?void 0:t.audioSession)try{t.audioSession.type="playback"}catch(t){console.warn("Setting navigator.audioSession.type failed:",t)}}(),this.audioContext=t||new AudioContext,this.gainNode=this.audioContext.createGain(),this.gainNode.connect(this.audioContext.destination)}load(){return t(this,void 0,void 0,(function*(){}))}remove(){this.destroy()}destroy(){if(!this._destroyed){if(this._destroyed=!0,this.currentSrc="",this.bufferNode){this.bufferNode.onended=null;try{this.bufferNode.stop()}catch(t){}this.bufferNode.disconnect(),this.bufferNode=null}this.gainNode.disconnect(),"function"==typeof this.audioContext.close&&Promise.resolve(this.audioContext.close.call(this.audioContext)).catch((()=>{})),this.buffer=null,this.unAll()}}get src(){return this.currentSrc}set src(t){if(this.currentSrc=t,this._duration=void 0,!t)return this.buffer=null,void this.emit("emptied");fetch(t).then((e=>{if(e.status>=400)throw new Error(`Failed to fetch ${t}: ${e.status} (${e.statusText})`);return e.arrayBuffer()})).then((e=>this.currentSrc!==t?null:this.audioContext.decodeAudioData(e))).then((e=>{this.currentSrc===t&&(this.buffer=e,this.emit("loadedmetadata"),this.emit("canplay"),this.autoplay&&this.play())})).catch((t=>{console.error("WebAudioPlayer load error:",t)}))}_play(){if(!this.paused)return;this.paused=!1,this.bufferNode&&(this.bufferNode.onended=null,this.bufferNode.disconnect()),this.bufferNode=this.audioContext.createBufferSource(),this.buffer&&(this.bufferNode.buffer=this.buffer),this.bufferNode.playbackRate.value=this._playbackRate,this.bufferNode.connect(this.gainNode);let t=this.playbackPosition;(t>=this.duration||t<0)&&(t=0,this.playbackPosition=0),this.bufferNode.start(this.audioContext.currentTime,t),this.playStartTime=this.audioContext.currentTime,this.bufferNode.onended=()=>{!this.paused&&this.duration-this.currentTime<.01&&(this.pause(),this.emit("ended"))}}_pause(){if(this.paused=!0,this.bufferNode){this.bufferNode.onended=null;try{this.bufferNode.stop()}catch(t){}}this.playbackPosition+=(this.audioContext.currentTime-this.playStartTime)*this._playbackRate}play(){return t(this,void 0,void 0,(function*(){this.paused&&(this._play(),this.emit("play"))}))}pause(){this.paused||(this._pause(),this.emit("pause"))}stopAt(t){const e=(t-this.currentTime)/this._playbackRate,i=this.bufferNode;null==i||i.stop(this.audioContext.currentTime+e),null==i||i.addEventListener("ended",(()=>{i===this.bufferNode&&(this.bufferNode=null,this.pause(),this.playbackPosition=Math.min(t,this.duration),this.emit("timeupdate"))}),{once:!0})}setSinkId(e){return t(this,void 0,void 0,(function*(){return this.audioContext.setSinkId(e)}))}get playbackRate(){return this._playbackRate}set playbackRate(t){const e=!this.paused;e&&this._pause(),this._playbackRate=t,e&&this._play(),this.bufferNode&&(this.bufferNode.playbackRate.value=t)}get currentTime(){return this.paused?this.playbackPosition:this.playbackPosition+(this.audioContext.currentTime-this.playStartTime)*this._playbackRate}set currentTime(t){const e=!this.paused;e&&this._pause(),this.playbackPosition=t,e&&this._play(),this.emit("seeking"),this.emit("timeupdate")}get duration(){var t,e;return null!==(t=this._duration)&&void 0!==t?t:(null===(e=this.buffer)||void 0===e?void 0:e.duration)||0}set duration(t){this._duration=t}get volume(){return this.gainNode.gain.value}set volume(t){this.gainNode.gain.value=t,this.emit("volumechange")}get muted(){return this._muted}set muted(t){this._muted!==t&&(this._muted=t,this._muted?this.gainNode.disconnect():this.gainNode.connect(this.audioContext.destination))}canPlayType(t){return/^(audio|video)\//.test(t)}getGainNode(){return this.gainNode}getChannelData(){const t=[];if(!this.buffer)return t;const e=this.buffer.numberOfChannels;for(let i=0;i<e;i++)t.push(this.buffer.getChannelData(i));return t}removeAttribute(t){switch(t){case"src":this.src="";break;case"playbackRate":this.playbackRate=0;break;case"currentTime":this.currentTime=0;break;case"duration":this.duration=0;break;case"volume":this.volume=0;break;case"muted":this.muted=0}}}const P={waveColor:"#999",progressColor:"#555",cursorWidth:1,minPxPerSec:0,fillParent:!0,interact:!0,dragToSeek:!1,autoScroll:!0,autoCenter:!0,sampleRate:8e3};class w extends u{static create(t){return new w(t)}getState(){return this.wavesurferState}getRenderer(){return this.renderer}constructor(t){const e=t.media||("WebAudio"===t.backend?new E:void 0);super({media:e,mediaControls:t.mediaControls,autoplay:t.autoplay,playbackRate:t.audioRate}),this.plugins=[],this.decodedData=null,this.stopAtPosition=null,this.subscriptions=[],this.mediaSubscriptions=[],this.abortController=null,this._isDestroyed=!1,this._loadVersion=0,this.reactiveCleanups=[],this.options=Object.assign({},P,t);const{state:i,actions:n}=function(t){var e,i,n,s,r,o;const a=null!==(e=null==t?void 0:t.currentTime)&&void 0!==e?e:l(0),c=null!==(i=null==t?void 0:t.duration)&&void 0!==i?i:l(0),u=null!==(n=null==t?void 0:t.isPlaying)&&void 0!==n?n:l(!1),d=null!==(s=null==t?void 0:t.isSeeking)&&void 0!==s?s:l(!1),p=null!==(r=null==t?void 0:t.volume)&&void 0!==r?r:l(1),m=null!==(o=null==t?void 0:t.playbackRate)&&void 0!==o?o:l(1),f=l(null),g=l(null),v=l(""),b=l(0),y=l(0),C=h((()=>!u.value),[u]),S=h((()=>null!==f.value),[f]),E=h((()=>S.value&&c.value>0),[S,c]),P=h((()=>a.value),[a]),w=h((()=>c.value>0?a.value/c.value:0),[a,c]);return{state:{currentTime:a,duration:c,isPlaying:u,isPaused:C,isSeeking:d,volume:p,playbackRate:m,audioBuffer:f,peaks:g,url:v,zoom:b,scrollPosition:y,canPlay:S,isReady:E,progress:P,progressPercent:w},actions:{setCurrentTime:t=>{const e=Math.max(0,Math.min(c.value||1/0,t));a.set(e)},setDuration:t=>{c.set(Math.max(0,t))},setPlaying:t=>{u.set(t)},setSeeking:t=>{d.set(t)},setVolume:t=>{const e=Math.max(0,Math.min(1,t));p.set(e)},setPlaybackRate:t=>{const e=Math.max(.1,Math.min(16,t));m.set(e)},setAudioBuffer:t=>{f.set(t),t&&c.set(t.duration)},setPeaks:t=>{g.set(t)},setUrl:t=>{v.set(t)},setZoom:t=>{b.set(Math.max(0,t))},setScrollPosition:t=>{y.set(Math.max(0,t))}}}}({isPlaying:this.isPlayingSignal,currentTime:this.currentTimeSignal,duration:this.durationSignal,volume:this.volumeSignal,playbackRate:this.playbackRateSignal,isSeeking:this.seekingSignal});this.wavesurferState=i,this.wavesurferActions=n,this.timer=new S;const s=e?void 0:this.getMediaElement();this.renderer=new C(this.options,s),this.initPlayerEvents(),this.initRendererEvents(),this.initTimerEvents(),this.initReactiveState(),this.initPlugins();const r=this.options.url||this.getSrc()||"";Promise.resolve().then((()=>{this.emit("init");const{peaks:t,duration:e}=this.options;(r||t&&e)&&this.load(r,t,e).catch((()=>{}))}))}updateProgress(t=this.getCurrentTime()){return this.renderer.renderProgress(t/this.getDuration(),this.isPlaying()),t}initTimerEvents(){this.subscriptions.push(this.timer.on("tick",(()=>{if(!this.isSeeking()){const t=this.updateProgress();if(this.emit("timeupdate",t),this.emit("audioprocess",t),null!=this.stopAtPosition&&this.isPlaying()&&t>=this.stopAtPosition){const t=this.stopAtPosition;this.pause(),this.setTime(t)}}})))}initReactiveState(){this.reactiveCleanups.push(function(t,e){const i=[];i.push(c((()=>{const i=t.isPlaying.value;e.emit(i?"play":"pause")}),[t.isPlaying])),i.push(c((()=>{const i=t.currentTime.value;e.emit("timeupdate",i),t.isPlaying.value&&e.emit("audioprocess",i)}),[t.currentTime,t.isPlaying])),i.push(c((()=>{t.isSeeking.value&&e.emit("seeking",t.currentTime.value)}),[t.isSeeking,t.currentTime]));let n=!1;i.push(c((()=>{t.isReady.value&&!n&&(n=!0,e.emit("ready",t.duration.value))}),[t.isReady,t.duration])),i.push(c((()=>{null===t.audioBuffer.value&&(n=!1)}),[t.audioBuffer]));let s=!1;return i.push(c((()=>{const i=t.isPlaying.value,n=t.currentTime.value,r=t.duration.value,o=r>0&&n>=r;s&&!i&&o&&e.emit("finish"),s=i&&o}),[t.isPlaying,t.currentTime,t.duration])),i.push(c((()=>{const i=t.zoom.value;i>0&&e.emit("zoom",i)}),[t.zoom])),()=>{i.forEach((t=>t()))}}(this.wavesurferState,{emit:this.emit.bind(this)}))}initPlayerEvents(){this.isPlaying()&&(this.emit("play"),this.timer.start()),this.mediaSubscriptions.push(this.onMediaEvent("timeupdate",(()=>{const t=this.updateProgress();this.emit("timeupdate",t)})),this.onMediaEvent("play",(()=>{this.emit("play"),this.timer.start()})),this.onMediaEvent("pause",(()=>{this.emit("pause"),this.timer.stop(),this.stopAtPosition=null})),this.onMediaEvent("emptied",(()=>{this.timer.stop(),this.stopAtPosition=null})),this.onMediaEvent("ended",(()=>{this.emit("timeupdate",this.getDuration()),this.emit("finish"),this.stopAtPosition=null})),this.onMediaEvent("seeking",(()=>{this.emit("seeking",this.getCurrentTime())})),this.onMediaEvent("error",(()=>{var t;this.emit("error",null!==(t=this.getMediaElement().error)&&void 0!==t?t:new Error("Media error")),this.stopAtPosition=null})))}initRendererEvents(){this.subscriptions.push(this.renderer.on("click",((t,e)=>{this.options.interact&&(this.seekTo(t),this.emit("interaction",t*this.getDuration()),this.emit("click",t,e))})),this.renderer.on("dblclick",((t,e)=>{this.emit("dblclick",t,e)})),this.renderer.on("scroll",((t,e,i,n)=>{const s=this.getDuration();this.emit("scroll",t*s,e*s,i,n)})),this.renderer.on("render",(()=>{this.emit("redraw")})),this.renderer.on("rendered",(()=>{this.emit("redrawcomplete")})),this.renderer.on("dragstart",(t=>{this.emit("dragstart",t)})),this.renderer.on("dragend",(t=>{this.emit("dragend",t)})),this.renderer.on("resize",(()=>{this.emit("resize")})));{let t;const e=this.renderer.on("drag",(e=>{var i;if(!this.options.interact)return;this.renderer.renderProgress(e),clearTimeout(t);let n=0;const s=this.options.dragToSeek;this.isPlaying()?n=0:!0===s?n=200:s&&"object"==typeof s&&(n=null!==(i=s.debounceTime)&&void 0!==i?i:200),t=setTimeout((()=>{this.seekTo(e)}),n),this.emit("interaction",e*this.getDuration()),this.emit("drag",e)}));this.subscriptions.push((()=>{clearTimeout(t),e()}))}}initPlugins(){var t;(null===(t=this.options.plugins)||void 0===t?void 0:t.length)&&this.options.plugins.forEach((t=>{this.registerPlugin(t)}))}unsubscribePlayerEvents(){this.mediaSubscriptions.forEach((t=>t())),this.mediaSubscriptions=[]}setOptions(t){this.options=Object.assign({},this.options,t),t.duration&&!t.peaks&&(this.decodedData=i.createBuffer(this.exportPeaks(),t.duration)),t.peaks&&t.duration&&(this.decodedData=i.createBuffer(t.peaks,t.duration)),this.renderer.setOptions(this.options),t.audioRate&&this.setPlaybackRate(t.audioRate),null!=t.mediaControls&&(this.getMediaElement().controls=t.mediaControls)}registerPlugin(t){if(this.plugins.includes(t))return t;t._init(this),this.plugins.push(t);const e=t.once("destroy",(()=>{this.plugins=this.plugins.filter((e=>e!==t)),this.subscriptions=this.subscriptions.filter((t=>t!==e))}));return this.subscriptions.push(e),t}unregisterPlugin(t){this.plugins=this.plugins.filter((e=>e!==t)),t.destroy()}getWrapper(){return this.renderer.getWrapper()}getWidth(){return this.renderer.getWidth()}getScroll(){return this.renderer.getScroll()}setScroll(t){return this.renderer.setScroll(t)}setScrollTime(t){const e=t/this.getDuration();this.renderer.setScrollPercentage(e)}getActivePlugins(){return this.plugins}loadAudio(e,n,s,r){return t(this,void 0,void 0,(function*(){var t;const o=++this._loadVersion;if(this._isDestroyed=!1,this.emit("load",e),!this.options.media&&this.isPlaying()&&this.pause(),this.decodedData=null,this.stopAtPosition=null,null===(t=this.abortController)||void 0===t||t.abort(),this.abortController=null,!n&&!s){const t=this.options.fetchParams||{};window.AbortController&&!t.signal&&(this.abortController=new AbortController,t.signal=this.abortController.signal);const i=t=>this.emit("loading",t);if(n=yield a.fetchBlob(e,i,t),this._isDestroyed||o!==this._loadVersion)return;const s=this.options.blobMimeType;s&&(n=new Blob([n],{type:s}))}if(this._isDestroyed||o!==this._loadVersion)return;this.setSrc(e,n);const l=yield new Promise((t=>{const e=r||this.getDuration();e?t(e):this.mediaSubscriptions.push(this.onMediaEvent("loadedmetadata",(()=>t(this.getDuration())),{once:!0}))}));if(!this._isDestroyed&&o===this._loadVersion){if(!e&&!n){const t=this.getMediaElement();t instanceof E&&(t.duration=l)}if(s)this.decodedData=i.createBuffer(s,l||0);else if(n){const t=yield n.arrayBuffer();if(this._isDestroyed||o!==this._loadVersion)return;this.decodedData=yield i.decode(t,this.options.sampleRate)}this._isDestroyed||o!==this._loadVersion||(this.decodedData&&(this.emit("decode",this.getDuration()),this.renderer.render(this.decodedData)),this.emit("ready",this.getDuration()))}}))}load(e,i,n){return t(this,void 0,void 0,(function*(){try{return yield this.loadAudio(e,void 0,i,n)}catch(t){throw this.emit("error",t),t}}))}loadBlob(e,i,n){return t(this,void 0,void 0,(function*(){try{return yield this.loadAudio("",e,i,n)}catch(t){throw this.emit("error",t),t}}))}zoom(t){if(!this.decodedData)throw new Error("No audio loaded");this.renderer.zoom(t),this.emit("zoom",t)}getDecodedData(){return this.decodedData}exportPeaks({channels:t=2,maxLength:e=8e3,precision:i=1e4}={}){if(!this.decodedData)throw new Error("The audio has not been decoded yet");const n=Math.min(t,this.decodedData.numberOfChannels),s=[];for(let t=0;t<n;t++){const n=this.decodedData.getChannelData(t),r=[],o=n.length/e;for(let t=0;t<e;t++){const e=n.slice(Math.floor(t*o),Math.ceil((t+1)*o));let s=0;for(let t=0;t<e.length;t++){const i=e[t];Math.abs(i)>Math.abs(s)&&(s=i)}r.push(Math.round(s*i)/i)}s.push(r)}return s}getDuration(){let t=super.getDuration()||0;return 0!==t&&t!==1/0||!this.decodedData||(t=this.decodedData.duration),t}toggleInteraction(t){this.options.interact=t}setTime(t){this.stopAtPosition=null,super.setTime(t),this.updateProgress(t),this.emit("timeupdate",t)}seekTo(t){const e=this.getDuration()*t;this.setTime(e)}play(e,i){const n=Object.create(null,{play:{get:()=>super.play}});return t(this,void 0,void 0,(function*(){null!=e&&this.setTime(e);const t=yield n.play.call(this);return null!=i&&(this.media instanceof E?this.media.stopAt(i):this.stopAtPosition=i),t}))}playPause(){return t(this,void 0,void 0,(function*(){return this.isPlaying()?this.pause():this.play()}))}stop(){this.pause(),this.setTime(0)}skip(t){this.setTime(this.getCurrentTime()+t)}empty(){this.load("",[[0]],.001)}setMediaElement(t){this.unsubscribePlayerEvents(),super.setMediaElement(t),this.initPlayerEvents()}exportImage(){return t(this,arguments,void 0,(function*(t="image/png",e=1,i="dataURL"){return this.renderer.exportImage(t,e,i)}))}destroy(){var t;this._isDestroyed=!0,this.emit("destroy"),null===(t=this.abortController)||void 0===t||t.abort(),this.plugins.forEach((t=>t.destroy())),this.subscriptions.forEach((t=>t())),this.unsubscribePlayerEvents(),this.reactiveCleanups.forEach((t=>t())),this.reactiveCleanups=[],this.timer.destroy(),this.renderer.destroy(),super.destroy()}}return w.BasePlugin=class extends e{constructor(t){super(),this.subscriptions=[],this.isDestroyed=!1,this.options=t}onInit(){}_init(t){this.isDestroyed&&(this.subscriptions=[],this.isDestroyed=!1),this.wavesurfer=t,this.onInit()}destroy(){this.emit("destroy"),this.subscriptions.forEach((t=>t())),this.subscriptions=[],this.isDestroyed=!0,this.wavesurfer=void 0}},w.dom=o,w}));
+    </script>
+
+    <script>
+        // ================================================================
+        //  主逻辑（完整版，已修改 SRT 渲染部分 + 配置模态框）
+        // ================================================================
+
+        // ---- 配置 ----
+        const ws = WaveSurfer.create({
+            container: '#waveform',
+            waveColor: '#69b1ff',
+            progressColor: '#2180ff',
+            cursorColor: '#ef4444',
+            cursorWidth: 2,
+            barWidth: 2,
+            barRadius: 3,
+            height: 180,
+            responsive: true,
+            dragToMove: true,
+            dragToSeek: true,
+            autoScroll: true,
+            centerOnZoom: true,
+            scrollParent: true,
+            centerOnPlay: true,
+        });
+
+        const $ = s => document.querySelector(s);
+        const $$ = s => document.querySelectorAll(s);
+
+        // ---- 全局状态 ----
+        let mode = 'lrc'; // 'lrc' | 'srt'
+        let items = [];
+        let selectedIndex = -1;
+        let selectedTimestamp = null;
+        let srtAutoRow = 0;
+        let srtAutoPhase = 'start';
+
+        // ---- 最新时间戳 ----
+        let lastTimestamp = 0;
+
+        // ---- 预览模式标志 ----
+        let previewActive = false;
+
+        // ---- 缩放 ----
+        let currentZoom = 6.25;
+        const ZOOM_STEP = 2;
+        const ZOOM_MAX = 6400;
+
+        // ---- 步长 ----
+        const STEP_MIN = 50;
+        const STEP_MAX = 1000;
+        const STEP_STEP = 50;
+        let stepMs = 100;
+
+        // ---- 边界放宽（左右独立） ----
+        let leftBoundaryMs = 100;
+        let rightBoundaryMs = 100;
+        const BOUNDARY_MIN = 0;
+        const BOUNDARY_MAX = 1000;
+        const BOUNDARY_STEP = 50;
+
+        // ---- 滚轮速度（秒） ----
+        const SPEED_MIN = 0.1;
+        const SPEED_MAX = 5.0;
+        const SPEED_STEP = 0.1;
+        let scrollSpeed = 1.0;
+
+        // ---- Toast ----
+        let toastTimer = null;
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => { t.classList.remove('show'); }, 2000);
+        }
+
+        function togglePlayback() {
+            if (ws.isPlaying()) {
+                ws.pause();
+                previewActive = false;
+                clearPreviewHighlight();
+                document.getElementById('playPause').innerHTML = '<span>▶</span><span class="btn-label">播放</span>';
+                return;
+            }
+            let hasTimestamp = false;
+            for (const item of items) {
+                if (mode === 'lrc' && item.time !== undefined && item.time !== null && item.time > 0) {
+                    hasTimestamp = true;
+                    break;
+                } else if (mode === 'srt' && item.start !== undefined && item.start !== null && item.start > 0) {
+                    hasTimestamp = true;
+                    break;
+                }
+            }
+            if (hasTimestamp) {
+                previewActive = true;
+                clearPreviewHighlight();
+                ws.play();
+                document.getElementById('playPause').innerHTML = '<span>⏸</span><span class="btn-label">暂停</span>';
+                showToast('▶ 预览模式（带时间戳）');
+            } else {
+                ws.play();
+                document.getElementById('playPause').innerHTML = '<span>⏸</span><span class="btn-label">暂停</span>';
+                showToast('▶ 播放音频（无时间戳）');
+            }
+        }
+
+        function findSpeechBoundary(currentTime, direction) {
+            const audioData = ws.getDecodedData();
+            if (!audioData) {
+                showToast('⚠️ 请先加载音频');
+                return null;
+            }
+            const channelData = audioData.getChannelData(0);
+            const sampleRate = audioData.sampleRate;
+            const currentSample = Math.floor(currentTime * sampleRate);
+            const totalSamples = channelData.length;
+            let maxAmplitude = 0;
+            for (let i = 0; i < channelData.length; i++) {
+                const abs = Math.abs(channelData[i]);
+                if (abs > maxAmplitude) maxAmplitude = abs;
+            }
+            const threshold = Math.max(maxAmplitude * 0.02, 0.01);
+
+            function isSilent(index) {
+                if (index < 0 || index >= totalSamples) return true;
+                return Math.abs(channelData[index]) < threshold;
+            }
+            if (direction === 'left') {
+                let pos = currentSample;
+                while (pos > 0 && isSilent(pos)) pos--;
+                while (pos > 0 && !isSilent(pos - 1)) pos--;
+                return pos / sampleRate;
+            } else if (direction === 'right') {
+                let pos = currentSample;
+                while (pos < totalSamples - 1 && isSilent(pos)) pos++;
+                while (pos < totalSamples - 1 && !isSilent(pos + 1)) pos++;
+                return pos / sampleRate;
+            }
+            return null;
+        }
+
+        // ---- 深色模式 ----
+        const themeToggle = $('#themeToggle');
+
+        function initTheme() {
+            const isDark = localStorage.getItem('theme') === 'dark';
+            if (isDark) document.body.classList.add('dark');
+        }
+        initTheme();
+        themeToggle.onclick = () => {
+            const isDark = document.body.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggle.blur();
+        };
+
+        // ---- 时间格式化 ----
+        function fmtTime(sec) {
+            const m = Math.floor(sec / 60).toString().padStart(2, '0');
+            const s = Math.floor(sec % 60).toString().padStart(2, '0');
+            const ms = Math.floor((sec % 1) * 1000).toString().padStart(3, '0');
+            return `[${m}:${s}.${ms}]`;
+        }
+
+        function fmtTimeSRT(sec) {
+            const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+            const s = Math.floor(sec % 60).toString().padStart(2, '0');
+            const ms = Math.floor((sec % 1) * 1000).toString().padStart(3, '0');
+            return `${h}:${m}:${s},${ms}`;
+        }
+
+        function parseTimeSRT(str) {
+            const parts = str.trim().split(/[:,]/);
+            if (parts.length === 4) {
+                const h = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const s = parseInt(parts[2], 10);
+                const ms = parseInt(parts[3], 10);
+                return h * 3600 + m * 60 + s + ms / 1000;
+            }
+            return 0;
+        }
+
+        function hasTimestamp(line) { return /^\[\d{2}:\d{2}\.\d{2,3}\]/.test(line); }
+
+        // ---- 撤销/重做 ----
+        const MAX_UNDO = 10;
+        let undoStack = [];
+        let redoStack = [];
+
+        // ---- 重新计算最新时间戳 ----
+        function recalculateLastTimestamp() {
+            if (mode === 'lrc') {
+                for (let i = items.length - 1; i >= 0; i--) {
+                    if (items[i].time !== undefined && items[i].time !== null && !isNaN(items[i].time)) {
+                        lastTimestamp = items[i].time;
+                        return;
+                    }
+                }
+            } else {
+                for (let i = items.length - 1; i >= 0; i--) {
+                    if (items[i].start !== undefined && items[i].start !== null && !isNaN(items[i].start)) {
+                        lastTimestamp = items[i].start;
+                        return;
+                    }
+                }
+            }
+            lastTimestamp = 0;
+        }
+
+        function updateLastTimestampDisplay() {
+            const el = document.getElementById('lastTimestampDisplay');
+            if (lastTimestamp !== null && lastTimestamp !== undefined && !isNaN(lastTimestamp)) {
+                el.textContent = fmtTime(lastTimestamp);
+                el.style.color = '#4f6ef7';
+            } else {
+                el.textContent = fmtTime(0);
+                el.style.color = '#b0c0d0';
+            }
+            if (document.body.classList.contains('dark') && lastTimestamp !== null) {
+                el.style.color = '#7a9aff';
+            } else if (document.body.classList.contains('dark') && lastTimestamp === null) {
+                el.style.color = '#5a6a7a';
+            }
+        }
+
+        // ---- 保存状态 ----
+        function saveState() {
+            const snapshot = {
+                items: JSON.parse(JSON.stringify(items)),
+                lastTimestamp: lastTimestamp
+            };
+            undoStack.push(snapshot);
+            if (undoStack.length > MAX_UNDO) undoStack.shift();
+            redoStack = [];
+        }
+
+        // ---- 查找第一个未完成的行 ----
+        function findFirstIncompleteRow() {
+            if (mode === 'lrc') {
+                for (let i = 0; i < items.length; i++) {
+                    const time = items[i].time;
+                    if (time === undefined || time === null || time <= 0) {
+                        return i;
+                    }
+                }
+            } else {
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    const startNotSet = (item.start === undefined || item.start === null || item.start <= 0);
+                    const endNotSet = (item.end === undefined || item.end === null || item.end <= 0);
+                    if (startNotSet || endNotSet) {
+                        return i;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        // ---- 撤销 ----
+        function undo() {
+            if (undoStack.length === 0) { showToast('⚠️ 没有可撤销的操作'); return; }
+            const current = {
+                items: JSON.parse(JSON.stringify(items)),
+                lastTimestamp: lastTimestamp
+            };
+            redoStack.push(current);
+            const previous = undoStack.pop();
+            items = previous.items;
+            lastTimestamp = previous.lastTimestamp;
+            selectedTimestamp = null;
+            if (mode === 'srt') {
+                recalcSrtAutoRow();
+            }
+            const firstIncomplete = findFirstIncompleteRow();
+            if (firstIncomplete !== -1) {
+                selectedIndex = firstIncomplete;
+            } else {
+                selectedIndex = items.length > 0 ? items.length - 1 : -1;
+            }
+            renderList();
+            updateLastTimestampDisplay();
+            if (selectedIndex !== -1 && selectedIndex < items.length) {
+                const selector = mode === 'lrc' ? `.marker-item[data-index="${selectedIndex}"]` :
+                    `.srt-item[data-index="${selectedIndex}"]`;
+                const el = document.querySelector(selector);
+                if (el) {
+                    setTimeout(() => {
+                        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        el.classList.add('flash');
+                        setTimeout(() => el.classList.remove('flash'), 1600);
+                    }, 100);
+                }
+            }
+            showToast('↩ 已撤销');
+        }
+
+        // ---- 重做 ----
+        function redo() {
+            if (redoStack.length === 0) { showToast('⚠️ 没有可重做的操作'); return; }
+            const current = {
+                items: JSON.parse(JSON.stringify(items)),
+                lastTimestamp: lastTimestamp
+            };
+            undoStack.push(current);
+            if (undoStack.length > MAX_UNDO) undoStack.shift();
+            const next = redoStack.pop();
+            items = next.items;
+            lastTimestamp = next.lastTimestamp;
+            selectedTimestamp = null;
+            if (mode === 'srt') {
+                recalcSrtAutoRow();
+            }
+            const firstIncomplete = findFirstIncompleteRow();
+            if (firstIncomplete !== -1) {
+                selectedIndex = firstIncomplete;
+            } else {
+                selectedIndex = items.length > 0 ? items.length - 1 : -1;
+            }
+            renderList();
+            updateLastTimestampDisplay();
+            if (selectedIndex !== -1 && selectedIndex < items.length) {
+                const selector = mode === 'lrc' ? `.marker-item[data-index="${selectedIndex}"]` :
+                    `.srt-item[data-index="${selectedIndex}"]`;
+                const el = document.querySelector(selector);
+                if (el) {
+                    setTimeout(() => {
+                        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        el.classList.add('flash');
+                        setTimeout(() => el.classList.remove('flash'), 1600);
+                    }, 100);
+                }
+            }
+            showToast('↪ 已重做');
+        }
+
+        // ---- 重新计算 SRT 自动行 ----
+        function recalcSrtAutoRow() {
+            if (mode !== 'srt') return;
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const startNotSet = (item.start === undefined || item.start === null || item.start <= 0);
+                const endNotSet = (item.end === undefined || item.end === null || item.end <= 0);
+                if (startNotSet || endNotSet) {
+                    srtAutoRow = i;
+                    srtAutoPhase = startNotSet ? 'start' : 'end';
+                    return;
+                }
+            }
+            srtAutoRow = items.length;
+            srtAutoPhase = 'start';
+        }
+
+        // ---- 核心更新逻辑 ----
+        function updateNextUntimestampedRow() {
+            if (mode === 'lrc') updateLRC();
+            else updateSRT();
+        }
+
+        // ---- LRC 更新 ----
+        function updateLRC() {
+            let targetIndex = -1;
+            if (selectedIndex >= 0 && selectedIndex < items.length) {
+                const item = items[selectedIndex];
+                if (!hasTimestamp(generateLRCItem(item))) targetIndex = selectedIndex;
+            }
+            if (targetIndex === -1) {
+                if (items.length === 0) { alert('列表为空，请先添加歌词。'); return; }
+                for (let i = 0; i < items.length; i++) {
+                    if (!hasTimestamp(generateLRCItem(items[i]))) { targetIndex = i; break; }
+                }
+                if (targetIndex === -1) { showToast('🎉 所有歌词行都已包含时间戳！'); return; }
+            }
+            saveState();
+            const now = ws.getCurrentTime();
+            const item = items[targetIndex];
+            item.time = now;
+            const isBilingual = document.getElementById('bilingualCheck').checked;
+            if (isBilingual && targetIndex + 1 < items.length) {
+                items[targetIndex + 1].time = now;
+            }
+            lastTimestamp = now;
+            selectedIndex = targetIndex;
+            renderList();
+            updateLastTimestampDisplay();
+            setTimeout(() => {
+                const el = document.querySelector(`.marker-item[data-index="${targetIndex}"]`);
+                if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    el.classList.add('flash');
+                    setTimeout(() => el.classList.remove('flash'), 1600); }
+            }, 120);
+            showToast(isBilingual ? `✅ 已同步第 ${targetIndex+1} 行和第 ${targetIndex+2} 行时间戳` :
+                `✅ 已为第 ${targetIndex+1} 行添加时间戳`);
+        }
+
+        function generateLRCItem(item) {
+            if (item.time !== undefined && item.time !== null) return fmtTime(item.time) + (item.text || '');
+            return item.text || '';
+        }
+
+        // ---- SRT 更新 ----
+        function updateSRT() {
+            const bilingual = document.getElementById('bilingualCheck').checked;
+            const onlyEnd = document.getElementById('onlyEndCheck').checked;
+
+            if (onlyEnd) {
+                if (selectedTimestamp) {
+                    const row = selectedTimestamp.row;
+                    if (row < 0 || row >= items.length) { selectedTimestamp = null; return; }
+                    const item = items[row];
+                    if (selectedTimestamp.type === 'end') {
+                        const now = ws.getCurrentTime();
+                        saveState();
+                        item.end = Math.max(now, item.start || 0 + 0.001);
+                        lastTimestamp = now;
+                        selectedIndex = row;
+                        selectedTimestamp = null;
+                        renderList();
+                        updateLastTimestampDisplay();
+                        scrollToItem(row);
+                        showToast(`✅ 已更新第 ${row+1} 行结束时间`);
+                        return;
+                    } else {
+                        selectedTimestamp = null;
+                        renderList();
+                        showToast('⚠️ 当前为“只更新结束时间”模式，请点击结束时间');
+                        return;
+                    }
+                }
+
+                if (bilingual) {
+                    let startRow = 0;
+                    while (startRow < items.length) {
+                        const item1 = items[startRow];
+                        const item2 = (startRow + 1 < items.length) ? items[startRow + 1] : null;
+                        const hasEnd1 = item1.end !== undefined && item1.end !== null && item1.end > 0;
+                        const hasEnd2 = item2 ? (item2.end !== undefined && item2.end !== null && item2.end > 0) : true;
+                        if (!hasEnd1 || !hasEnd2) {
+                            const now = ws.getCurrentTime();
+                            saveState();
+                            const start1 = (item1.start !== undefined && item1.start !== null && item1.start > 0) ?
+                                item1.start : now;
+                            const endTime = Math.max(now, start1 + 0.001);
+                            item1.end = endTime;
+                            if (item2) {
+                                const start2 = (item2.start !== undefined && item2.start !== null && item2.start > 0) ?
+                                    item2.start : now;
+                                item2.end = Math.max(now, start2 + 0.001);
+                            }
+                            lastTimestamp = now;
+                            selectedIndex = startRow;
+                            srtAutoRow = startRow + 2;
+                            srtAutoPhase = 'start';
+                            renderList();
+                            updateLastTimestampDisplay();
+                            scrollToItem(startRow);
+                            showToast(`✅ 已设置第 ${startRow+1} 行和第 ${startRow+2} 行结束时间`);
+                            return;
+                        }
+                        startRow += 2;
+                    }
+                    showToast('🎉 所有字幕组都已设置结束时间！');
+                } else {
+                    for (let i = 0; i < items.length; i++) {
+                        const item = items[i];
+                        if (item.end === undefined || item.end === null || item.end <= 0) {
+                            const now = ws.getCurrentTime();
+                            saveState();
+                            const startTime = (item.start !== undefined && item.start !== null && item.start > 0) ?
+                                item.start : now;
+                            item.end = Math.max(now, startTime + 0.001);
+                            lastTimestamp = now;
+                            selectedIndex = i;
+                            renderList();
+                            updateLastTimestampDisplay();
+                            scrollToItem(i);
+                            showToast(`✅ 已设置第 ${i+1} 行结束时间`);
+                            return;
+                        }
+                    }
+                    showToast('🎉 所有行都已设置结束时间！');
+                }
+                return;
+            }
+
+            // ===== 正常模式（更新开始或结束） =====
+            if (!bilingual) {
+                if (selectedTimestamp) {
+                    const row = selectedTimestamp.row;
+                    if (row < 0 || row >= items.length) { selectedTimestamp = null; return; }
+                    const item = items[row];
+                    const now = ws.getCurrentTime();
+                    saveState();
+                    const type = selectedTimestamp.type;
+                    if (type === 'start') {
+                        item.start = now;
+                    } else {
+                        item.end = now;
+                        if (item.start !== undefined && item.end !== undefined && item.start > item.end) {
+                            item.start = item.end - 0.001;
+                        }
+                    }
+                    lastTimestamp = now;
+                    selectedIndex = row;
+                    selectedTimestamp = null;
+                    renderList();
+                    updateLastTimestampDisplay();
+                    showToast(`✅ 已更新第 ${row+1} 行 ${type} 时间`);
+                    return;
+                }
+
+                if (selectedIndex >= 0 && selectedIndex < items.length) {
+                    const item = items[selectedIndex];
+                    const startNotSet = (item.start === undefined || item.start === null || item.start <= 0);
+                    const endNotSet = (item.end === undefined || item.end === null || item.end <= 0);
+                    if (startNotSet || endNotSet) {
+                        const now = ws.getCurrentTime();
+                        saveState();
+                        if (startNotSet) {
+                            item.start = now;
+                            lastTimestamp = now;
+                            srtAutoRow = selectedIndex;
+                            srtAutoPhase = 'end';
+                        } else {
+                            item.end = now > item.start ? now : item.start + 0.001;
+                            lastTimestamp = now;
+                            srtAutoRow = selectedIndex + 1;
+                            srtAutoPhase = 'start';
+                        }
+                        selectedTimestamp = null;
+                        renderList();
+                        updateLastTimestampDisplay();
+                        scrollToItem(selectedIndex);
+                        showToast(`✅ 已更新第 ${selectedIndex+1} 行 ${startNotSet ? '开始' : '结束'}时间`);
+                        return;
+                    }
+                }
+
+                let found = false;
+                for (let i = srtAutoRow; i < items.length; i++) {
+                    const item = items[i];
+                    if (item.start === undefined || item.start === null || item.start <= 0) {
+                        const now = ws.getCurrentTime();
+                        saveState();
+                        item.start = now;
+                        lastTimestamp = now;
+                        found = true;
+                        selectedIndex = i;
+                        srtAutoRow = i;
+                        srtAutoPhase = 'end';
+                        renderList();
+                        updateLastTimestampDisplay();
+                        scrollToItem(i);
+                        showToast(`✅ 已设置第 ${i+1} 行开始时间`);
+                        break;
+                    } else if (item.end === undefined || item.end === null || item.end <= 0) {
+                        const now = ws.getCurrentTime();
+                        saveState();
+                        item.end = now > item.start ? now : item.start + 0.001;
+                        lastTimestamp = now;
+                        found = true;
+                        selectedIndex = i;
+                        srtAutoRow = i + 1;
+                        srtAutoPhase = 'start';
+                        renderList();
+                        updateLastTimestampDisplay();
+                        scrollToItem(i);
+                        showToast(`✅ 已设置第 ${i+1} 行结束时间`);
+                        break;
+                    }
+                }
+                if (!found) showToast('🎉 所有字幕行都已包含完整时间！');
+            } else {
+                // 双语模式
+                if (selectedTimestamp) {
+                    const row = selectedTimestamp.row;
+                    if (row < 0 || row >= items.length) { selectedTimestamp = null; return; }
+                    const item = items[row];
+                    const now = ws.getCurrentTime();
+                    saveState();
+                    const type = selectedTimestamp.type;
+                    if (type === 'start') {
+                        item.start = now;
+                    } else {
+                        item.end = now;
+                        if (item.start !== undefined && item.end !== undefined && item.start > item.end) {
+                            item.start = item.end - 0.001;
+                        }
+                    }
+                    lastTimestamp = now;
+                    selectedIndex = row;
+                    selectedTimestamp = null;
+                    renderList();
+                    updateLastTimestampDisplay();
+                    showToast(`✅ 已更新第 ${row+1} 行 ${type} 时间`);
+                    return;
+                }
+
+                if (selectedIndex >= 0 && selectedIndex < items.length) {
+                    let startRow = selectedIndex % 2 === 0 ? selectedIndex : selectedIndex - 1;
+                    if (startRow < 0) startRow = 0;
+                    const item1 = items[startRow];
+                    const item2 = (startRow + 1 < items.length) ? items[startRow + 1] : null;
+                    if (item2) {
+                        const hasStart1 = item1.start !== undefined && item1.start !== null && item1.start > 0;
+                        const hasEnd1 = item1.end !== undefined && item1.end !== null && item1.end > 0;
+                        const hasStart2 = item2.start !== undefined && item2.start !== null && item2.start > 0;
+                        const hasEnd2 = item2.end !== undefined && item2.end !== null && item2.end > 0;
+
+                        if (!hasStart1 || !hasStart2) {
+                            const now = ws.getCurrentTime();
+                            saveState();
+                            item1.start = now;
+                            item2.start = now;
+                            lastTimestamp = now;
+                            selectedIndex = startRow;
+                            srtAutoRow = startRow;
+                            srtAutoPhase = 'end';
+                            renderList();
+                            updateLastTimestampDisplay();
+                            scrollToItem(startRow);
+                            showToast(`✅ 已设置第 ${startRow+1} 行和第 ${startRow+2} 行开始时间`);
+                            return;
+                        } else if (!hasEnd1 || !hasEnd2) {
+                            const now = ws.getCurrentTime();
+                            saveState();
+                            const endTime = Math.max(now, item1.start + 0.001);
+                            item1.end = endTime;
+                            item2.end = endTime;
+                            lastTimestamp = now;
+                            selectedIndex = startRow;
+                            srtAutoRow = startRow + 2;
+                            srtAutoPhase = 'start';
+                            renderList();
+                            updateLastTimestampDisplay();
+                            scrollToItem(startRow);
+                            showToast(`✅ 已设置第 ${startRow+1} 行和第 ${startRow+2} 行结束时间`);
+                            return;
+                        }
+                    }
+                }
+
+                let startRow = srtAutoRow;
+                while (startRow < items.length) {
+                    const item1 = items[startRow];
+                    const item2 = (startRow + 1 < items.length) ? items[startRow + 1] : null;
+                    const hasStart1 = item1.start !== undefined && item1.start !== null && item1.start > 0;
+                    const hasEnd1 = item1.end !== undefined && item1.end !== null && item1.end > 0;
+                    const hasStart2 = item2 ? (item2.start !== undefined && item2.start !== null && item2.start > 0) :
+                    true;
+                    const hasEnd2 = item2 ? (item2.end !== undefined && item2.end !== null && item2.end > 0) : true;
+
+                    if (!hasStart1 || !hasStart2) {
+                        const now = ws.getCurrentTime();
+                        saveState();
+                        item1.start = now;
+                        if (item2) item2.start = now;
+                        lastTimestamp = now;
+                        selectedIndex = startRow;
+                        srtAutoRow = startRow;
+                        srtAutoPhase = 'end';
+                        renderList();
+                        updateLastTimestampDisplay();
+                        scrollToItem(startRow);
+                        showToast(`✅ 已设置第 ${startRow+1} 行和第 ${startRow+2} 行开始时间`);
+                        return;
+                    } else if (!hasEnd1 || !hasEnd2) {
+                        const now = ws.getCurrentTime();
+                        saveState();
+                        const endTime = Math.max(now, item1.start + 0.001);
+                        item1.end = endTime;
+                        if (item2) item2.end = endTime;
+                        lastTimestamp = now;
+                        selectedIndex = startRow;
+                        srtAutoRow = startRow + 2;
+                        srtAutoPhase = 'start';
+                        renderList();
+                        updateLastTimestampDisplay();
+                        scrollToItem(startRow);
+                        showToast(`✅ 已设置第 ${startRow+1} 行和第 ${startRow+2} 行结束时间`);
+                        return;
+                    } else {
+                        startRow += 2;
+                        srtAutoRow = startRow;
+                    }
+                }
+                showToast('🎉 所有字幕组都已包含完整时间！');
+            }
+        }
+
+        function scrollToItem(index) {
+            setTimeout(() => {
+                const el = document.querySelector(`.srt-item[data-index="${index}"]`);
+                if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    el.classList.add('flash');
+                    setTimeout(() => el.classList.remove('flash'), 1600); }
+            }, 120);
+        }
+
+        // ---- 清除时间戳 ----
+        function clearTimestamps() {
+            const checkedIndices = [];
+            items.forEach((item, i) => { if (item.checked) checkedIndices.push(i); });
+            if (checkedIndices.length === 0) {
+                alert('未选中任何歌词/字幕行，请先勾选要清除时间戳的行。');
+                return;
+                if (mode === 'srt') {
+                    srtAutoRow = 0;
+                    srtAutoPhase = 'start';
+                }
+            }
+            if (!confirm(`确定要清除 ${checkedIndices.length} 行的时间戳吗？\n（LRC模式清空时间，SRT模式清空开始/结束时间）`)) return;
+
+            saveState();
+            checkedIndices.forEach(i => {
+                const item = items[i];
+                if (mode === 'lrc') item.time = null;
+                else { item.start = null;
+                    item.end = null; }
+            });
+            checkedIndices.forEach(i => { items[i].checked = false; });
+            document.getElementById('selectAllCheck').checked = false;
+
+            const allEmpty = items.every(item => {
+                if (mode === 'lrc') return item.time === null || item.time === undefined;
+                else return (item.start === null || item.start === undefined) && (item.end === null || item.end ===
+                    undefined);
+            });
+            if (allEmpty) {
+                selectedIndex = -1;
+                if (mode === 'srt') {
+                    srtAutoRow = 0;
+                    srtAutoPhase = 'start';
+                }
+            }
+            renderList();
+            recalculateLastTimestamp();
+            updateLastTimestampDisplay();
+            showToast(`🧹 已清除 ${checkedIndices.length} 行时间戳`);
+        }
+
+        // ---- 渲染列表 ----
+        function renderList() {
+            const container = document.getElementById('markerList');
+            const countEl = document.getElementById('markerCount');
+            if (mode === 'lrc') {
+                let html = '';
+                items.forEach((item, i) => {
+                    const displayText = generateLRCItem(item);
+                    const active = (i === selectedIndex) ? 'active' : '';
+                    const checked = item.checked ? 'checked' : '';
+                    html += `
+                        <div class="marker-item ${active}" data-index="${i}">
+                            <input type="checkbox" class="item-check" data-index="${i}" ${checked} />
+                            <span class="num">${i+1}.</span>
+                            <span class="text" contenteditable="plaintext-only" data-index="${i}">${displayText}</span>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+                container.querySelectorAll('.item-check').forEach(el => {
+                    const idx = parseInt(el.dataset.index);
+                    el.addEventListener('change', () => {
+                        items[idx].checked = el.checked;
+                        const allChecked = items.every(it => it.checked);
+                        document.getElementById('selectAllCheck').checked = allChecked;
+                    });
+                });
+                container.querySelectorAll('.marker-item .text').forEach(el => {
+                    const idx = parseInt(el.dataset.index);
+                    el.addEventListener('focus', () => {
+                        if (selectedIndex === idx) return;
+                        selectedIndex = idx;
+                        renderList();
+                        setTimeout(() => el.focus(), 0);
+                    });
+                    el.addEventListener('input', () => {
+                        const raw = el.textContent.trim();
+                        const match = raw.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+                        if (match) {
+                            const m = parseInt(match[1], 10);
+                            const s = parseInt(match[2], 10);
+                            const ms = parseInt(match[3].padEnd(3, '0').slice(0, 3), 10);
+                            const time = m * 60 + s + ms / 1000;
+                            items[idx].time = time;
+                            items[idx].text = match[4];
+                        } else {
+                            items[idx].text = raw;
+                        }
+                    });
+                    el.addEventListener('click', e => e.stopPropagation());
+                });
+                countEl.textContent = items.length + ' 条';
+            } else {
+                let html = '';
+                items.forEach((item, i) => {
+                    const startStr = item.start !== undefined && item.start !== null ? fmtTimeSRT(item.start) :
+                        '00:00:00,000';
+                    const endStr = item.end !== undefined && item.end !== null ? fmtTimeSRT(item.end) :
+                        '00:00:00,000';
+                    const active = (i === selectedIndex) ? 'active' : '';
+                    const checked = item.checked ? 'checked' : '';
+                    const startSel = (selectedTimestamp && selectedTimestamp.row === i && selectedTimestamp.type ===
+                        'start') ? 'selected' : '';
+                    const endSel = (selectedTimestamp && selectedTimestamp.row === i && selectedTimestamp.type ===
+                        'end') ? 'selected' : '';
+                    html += `
+                        <div class="srt-item ${active}" data-index="${i}">
+                            <div class="srt-top-row">
+                                <input type="checkbox" class="item-check" data-index="${i}" ${checked} />
+                                <span class="srt-index-num">${i+1}</span>
+                                <span class="srt-times">
+                                    <span class="srt-start ${startSel}" data-row="${i}" data-type="start">${startStr}</span>
+                                    <span style="color:#888;"> --> </span>
+                                    <span class="srt-end ${endSel}" data-row="${i}" data-type="end">${endStr}</span>
+                                </span>
+                            </div>
+                            <div class="srt-text" contenteditable="plaintext-only" data-index="${i}">${item.text || ''}</div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+                container.querySelectorAll('.item-check').forEach(el => {
+                    const idx = parseInt(el.dataset.index);
+                    el.addEventListener('change', () => {
+                        items[idx].checked = el.checked;
+                        const allChecked = items.every(it => it.checked);
+                        document.getElementById('selectAllCheck').checked = allChecked;
+                    });
+                });
+                container.querySelectorAll('.srt-text').forEach(el => {
+                    const idx = parseInt(el.dataset.index);
+                    el.addEventListener('focus', () => {
+                        if (selectedIndex === idx) return;
+                        selectedIndex = idx;
+                        renderList();
+                        setTimeout(() => el.focus(), 0);
+                    });
+                    el.addEventListener('input', () => {
+                        items[idx].text = el.textContent.trim();
+                    });
+                    el.addEventListener('click', e => e.stopPropagation());
+                });
+                container.querySelectorAll('.srt-times span').forEach(el => {
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const row = parseInt(el.dataset.row);
+                        const type = el.dataset.type;
+                        if (selectedTimestamp && selectedTimestamp.row === row && selectedTimestamp.type ===
+                            type) {
+                            selectedTimestamp = null;
+                        } else {
+                            selectedTimestamp = { row, type };
+                            selectedIndex = row;
+                        }
+                        renderList();
+                    });
+                });
+                countEl.textContent = items.length + ' 条';
+            }
+            const allChecked = items.every(it => it.checked);
+            document.getElementById('selectAllCheck').checked = allChecked;
+            updateLastTimestampDisplay();
+        }
+
+        // ---- 添加新项 ----
+        function addItem(text) {
+            const now = ws.getCurrentTime();
+            if (mode === 'lrc') {
+                items.push({ time: now, text: text, checked: false });
+            } else {
+                items.push({
+                    start: now,
+                    end: null,
+                    text: text,
+                    index: items.length + 1,
+                    checked: false
+                });
+                if (items.length === 1) {
+                    srtAutoRow = 0;
+                    srtAutoPhase = 'start';
+                }
+            }
+            selectedIndex = -1;
+            renderList();
+            showToast(`✅ 已添加第 ${items.length} 行`);
+        }
+
+        // ---- 导入 ----
+        async function importFile(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            let targetMode = mode;
+            if (ext === 'lrc') targetMode = 'lrc';
+            else if (ext === 'srt') targetMode = 'srt';
+            else if (ext === 'txt') {
+                const text = await file.text();
+                const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                let hasSRT = false;
+                for (let i = 0; i < lines.length - 1; i++) {
+                    if (!isNaN(parseInt(lines[i])) && lines[i + 1].includes('-->')) { hasSRT = true; break; }
+                }
+                targetMode = hasSRT ? 'srt' : 'lrc';
+                window._tempFileContent = text;
+            } else targetMode = mode;
+            if (targetMode !== mode) setMode(targetMode);
+            let text;
+            if (window._tempFileContent) { text = window._tempFileContent;
+                window._tempFileContent = null; } else text = await file.text();
+            const lines = text.split(/\r?\n/);
+            if (mode === 'lrc') {
+                const timeReg = /^\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+                const validLines = lines.filter(l => l.trim() !== '');
+                let hasLRC = validLines.some(line => timeReg.test(line));
+                if (hasLRC) {
+                    items = [];
+                    for (const line of validLines) {
+                        const match = line.match(timeReg);
+                        if (match) {
+                            const m = parseInt(match[1], 10);
+                            const s = parseInt(match[2], 10);
+                            const ms = parseInt(match[3].padEnd(3, '0').slice(0, 3), 10);
+                            const time = m * 60 + s + ms / 1000;
+                            const text = line.replace(timeReg, '').trim();
+                            items.push({ time, text, checked: false });
+                        } else items.push({ time: null, text: line.trim(), checked: false });
+                    }
+                } else {
+                    items = validLines.map(line => ({ time: null, text: line.trim(), checked: false }));
+                }
+            } else {
+                const newItems = [];
+                let i = 0;
+                while (i < lines.length) {
+                    const line = lines[i].trim();
+                    if (line === '') { i++; continue; }
+                    if (line.includes('-->')) {
+                        let index = newItems.length + 1;
+                        if (i > 0) {
+                            const prevLine = lines[i - 1].trim();
+                            if (prevLine !== '' && !prevLine.includes('-->') && !isNaN(parseInt(prevLine))) index =
+                                parseInt(prevLine);
+                        }
+                        const parts = line.split('-->');
+                        if (parts.length === 2) {
+                            const start = parseTimeSRT(parts[0].trim());
+                            const end = parseTimeSRT(parts[1].trim());
+                            let j = i + 1;
+                            let textLinesArr = [];
+                            while (j < lines.length) {
+                                const nextLine = lines[j].trim();
+                                if (nextLine === '') { j++; continue; }
+                                if (nextLine.includes('-->')) break;
+                                if (!isNaN(parseInt(nextLine)) && j + 1 < lines.length && lines[j + 1].trim()
+                                    .includes('-->')) break;
+                                textLinesArr.push(nextLine);
+                                j++;
+                            }
+                            const textContent = textLinesArr.join('\n');
+                            newItems.push({ start, end, text: textContent, index, checked: false });
+                            i = j;
+                            continue;
+                        }
+                    }
+                    i++;
+                }
+                if (newItems.length > 0) items = newItems;
+                else {
+                    const blocks = [];
+                    let currentBlock = [];
+                    for (const line of lines) {
+                        if (line.trim() === '') {
+                            if (currentBlock.length > 0) { blocks.push(currentBlock);
+                                currentBlock = []; }
+                        } else currentBlock.push(line.trim());
+                    }
+                    if (currentBlock.length > 0) blocks.push(currentBlock);
+                    if (blocks.length > 0 && blocks[0].length >= 2) {
+                        const first = blocks[0];
+                        if (!isNaN(parseInt(first[0])) && first[1].includes('-->')) {
+                            items = [];
+                            blocks.forEach(block => {
+                                if (block.length < 2) return;
+                                const idx = parseInt(block[0]);
+                                const timeLine = block[1];
+                                const textLines = block.slice(2).join('\n');
+                                const parts = timeLine.split('-->');
+                                if (parts.length === 2) {
+                                    const start = parseTimeSRT(parts[0].trim());
+                                    const end = parseTimeSRT(parts[1].trim());
+                                    items.push({ start, end, text: textLines, index: idx, checked: false });
+                                }
+                            });
+                        } else {
+                            items = blocks.map(block => ({ start: null, end: null, text: block.join('\n'),
+                                index: items.length + 1, checked: false }));
+                        }
+                    } else {
+                        items = lines.filter(l => l.trim() !== '').map(line => ({ start: null, end: null,
+                            text: line.trim(), index: items.length + 1, checked: false }));
+                    }
+                }
+                srtAutoRow = 0;
+                srtAutoPhase = 'start';
+            }
+            selectedIndex = -1;
+            srtAutoRow = 0;
+            srtAutoPhase = 'start';
+            recalculateLastTimestamp();
+            undoStack = [];
+            redoStack = [];
+            renderList();
+            updateLastTimestampDisplay();
+            showToast(`📥 已导入 ${items.length} 行（${mode.toUpperCase()}）`);
+        }
+
+        // ---- 加载音频 ----
+        async function loadAudioFile(file) {
+            const name = file.name;
+            const ext = name.split('.').pop().toLowerCase();
+            $('#f-name').textContent = name;
+            $('#f-type').textContent = ext.toUpperCase();
+            $('#f-size').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+            ws.loadBlob(file);
+            ws.once('ready', async () => {
+                try {
+                    const audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+                    const buf = await file.arrayBuffer();
+                    const ab = await audioCtx.decodeAudioData(buf);
+                    $('#f-duration').textContent = fmtTime(ab.duration).replace(/\[|\]/g, '');
+                    $('#f-sample').textContent = ab.sampleRate;
+                    $('#f-channel').textContent = ab.numberOfChannels === 1 ? '单声道' : '立体声';
+                } catch (err) {}
+            });
+        }
+
+        function getExportContent(format, filterType = 'all') {
+            let exportItems = [];
+            if (format === 'srt') {
+                if (filterType === 'odd') {
+                    exportItems = items.filter((_, idx) => idx % 2 === 0);
+                } else if (filterType === 'even') {
+                    exportItems = items.filter((_, idx) => idx % 2 === 1);
+                } else {
+                    exportItems = items.slice();
+                }
+            } else {
+                exportItems = items;
+            }
+
+            let content = '';
+
+            if (format === 'lrc') {
+                content = exportItems.map(item => {
+                    let time = null;
+                    if (item.time !== undefined && item.time !== null) {
+                        time = item.time;
+                    } else if (item.start !== undefined && item.start !== null) {
+                        time = item.start;
+                    }
+                    if (time !== null) {
+                        return fmtTime(time) + (item.text || '');
+                    } else {
+                        return item.text || '';
+                    }
+                }).join('\n');
+            } else if (format === 'txt') {
+                if (mode === 'lrc') {
+                    content = exportItems.map(item => {
+                        if (item.time !== undefined && item.time !== null) {
+                            return fmtTime(item.time) + (item.text || '');
+                        } else {
+                            return item.text || '';
+                        }
+                    }).join('\n');
+                } else {
+                    content = exportItems.map(item => item.text || '').join('\n');
+                }
+            } else if (format === 'srt') {
+                let srt = '';
+                for (let i = 0; i < exportItems.length; i++) {
+                    const item = exportItems[i];
+                    let start = item.start !== undefined && item.start !== null ? item.start : 0;
+                    let end = item.end !== undefined && item.end !== null ? item.end : (start + 2);
+                    srt += `${i+1}\n${fmtTimeSRT(start)} --> ${fmtTimeSRT(end)}\n${item.text || ''}\n\n`;
+                }
+                content = srt.trim();
+            }
+
+            console.log('导出格式:', format, '筛选类型:', filterType, '内容长度:', content.length);
+            return content;
+        }
+
+        async function exportFile(format, filterType = 'all') {
+            const content = getExportContent(format, filterType);
+            if (!content || content.trim() === '') {
+                showToast('⚠️ 没有可导出的内容！');
+                return;
+            }
+
+            const ext = format;
+            let baseName = 'lyrics';
+            const nameEl = document.getElementById('f-name');
+            if (nameEl && nameEl.textContent && nameEl.textContent !== '未加载') {
+                const parts = nameEl.textContent.split('.');
+                if (parts.length > 1) baseName = parts.slice(0, -1).join('.');
+                else baseName = nameEl.textContent;
+            }
+            const suggestedName = `${baseName}.${ext}`;
+
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName,
+                    types: [{ description: ext.toUpperCase() + ' file', accept: { 'text/plain': ['.' + ext] } }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(content);
+                await writable.close();
+                showToast(`✅ 已保存为 ${handle.name}`);
+            } catch (err) {
+                if (err.name === 'AbortError' || err.name === 'SecurityError') {
+                    return;
+                }
+                console.warn('使用 fallback 下载:', err);
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = suggestedName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                showToast(`📤 已导出（下载）`);
+            }
+        }
+
+        // ---- 切换模式 ----
+        function setMode(newMode) {
+            if (newMode === mode) return;
+            mode = newMode;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+            selectedTimestamp = null;
+            if (mode === 'srt') { srtAutoRow = 0;
+                srtAutoPhase = 'start'; }
+            undoStack = [];
+            redoStack = [];
+            recalculateLastTimestamp();
+            renderList();
+            updateLastTimestampDisplay();
+            document.getElementById('modalTitle').textContent = mode === 'lrc' ? '✏️ 添加歌词' : '✏️ 添加字幕';
+            document.getElementById('modalSub').textContent = mode === 'lrc' ? '输入文字后按回车保存' : '输入文字后按回车保存（时间戳后续设置）';
+            showToast(`切换到 ${mode.toUpperCase()} 模式`);
+            initAlign();
+            updateOnlyEndCheckbox();
+            const srtBtn = document.getElementById('exportSrtBtn');
+            if (mode === 'lrc') {
+                srtBtn.style.opacity = '0.5';
+                srtBtn.style.cursor = 'not-allowed';
+                srtBtn.style.pointerEvents = 'none';
+                srtBtn.title = 'LRC 模式下无法导出 SRT 格式';
+            } else {
+                srtBtn.style.opacity = '1';
+                srtBtn.style.cursor = 'pointer';
+                srtBtn.style.pointerEvents = 'auto';
+                srtBtn.title = '';
+            }
+        }
+
+        // ---- 预览功能 ----
+        function startPreview() {
+            const duration = ws.getDuration();
+            if (!duration || duration === 0) { showToast('⚠️ 请先加载音频文件'); return; }
+            let hasTimestamp = false;
+            for (const item of items) {
+                if (mode === 'lrc' && item.time !== undefined && item.time !== null) { hasTimestamp = true; break; }
+                if (mode === 'srt' && item.start !== undefined && item.start !== null) { hasTimestamp = true; break; }
+            }
+            if (!hasTimestamp) { showToast('⚠️ 列表中没有时间戳，无法预览'); return; }
+            clearPreviewHighlight();
+            previewActive = true;
+            ws.play();
+            document.getElementById('previewBtn').innerHTML = '<span>⏸</span><span class="btn-label">暂停</span>';
+            showToast('▶ 预览开始（从当前游标位置）');
+        }
+
+        function stopPreview() {
+            previewActive = false;
+            clearPreviewHighlight();
+            document.getElementById('previewBtn').innerHTML = '<span>▶</span><span class="btn-label">预览</span>';
+        }
+
+        function clearPreviewHighlight() {
+            document.querySelectorAll('.marker-item.preview-highlight, .srt-item.preview-highlight')
+                .forEach(el => el.classList.remove('preview-highlight'));
+        }
+
+        function updatePreviewHighlight() {
+            if (!previewActive) return;
+            const currentTime = ws.getCurrentTime();
+            let targetIndex = -1;
+
+            if (mode === 'lrc') {
+                const bilingual = document.getElementById('bilingualCheck').checked;
+                let bestTime = -1;
+                for (let i = 0; i < items.length; i++) {
+                    const time = items[i].time;
+                    if (time !== undefined && time !== null && time <= currentTime) {
+                        if (bilingual) {
+                            if (time > bestTime) { bestTime = time;
+                                targetIndex = i; }
+                        } else {
+                            if (time >= bestTime) { bestTime = time;
+                                targetIndex = i; }
+                        }
+                    }
+                }
+            } else {
+                const bilingual = document.getElementById('bilingualCheck').checked;
+                let candidates = [];
+                for (let i = 0; i < items.length; i++) {
+                    const start = items[i].start;
+                    const end = items[i].end;
+                    if (start !== undefined && start !== null && start <= currentTime) {
+                        if (end === undefined || end === null || end >= currentTime) {
+                            candidates.push({ index: i, start: start, end: end });
+                        }
+                    }
+                }
+                if (candidates.length > 0) {
+                    let maxStart = -Infinity;
+                    for (let c of candidates) if (c.start > maxStart) maxStart = c.start;
+                    let latest = candidates.filter(c => c.start === maxStart);
+                    latest.sort((a, b) => a.index - b.index);
+                    targetIndex = bilingual ? latest[0].index : latest[latest.length - 1].index;
+                } else {
+                    let bestStart = -1;
+                    let startCandidates = [];
+                    for (let i = 0; i < items.length; i++) {
+                        const start = items[i].start;
+                        if (start !== undefined && start !== null && start <= currentTime) {
+                            if (start > bestStart) { bestStart = start;
+                                startCandidates = [{ index: i, start: start }]; } else if (start === bestStart)
+                                startCandidates.push({ index: i, start: start });
+                        }
+                    }
+                    if (startCandidates.length > 0) {
+                        startCandidates.sort((a, b) => a.index - b.index);
+                        targetIndex = bilingual ? startCandidates[0].index : startCandidates[startCandidates.length - 1]
+                            .index;
+                    }
+                }
+            }
+            clearPreviewHighlight();
+            if (targetIndex !== -1) {
+                const selector = mode === 'lrc' ? `.marker-item[data-index="${targetIndex}"]` :
+                    `.srt-item[data-index="${targetIndex}"]`;
+                const el = document.querySelector(selector);
+                if (el) {
+                    el.classList.add('preview-highlight');
+                    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            }
+        }
+
+        // ---- 对齐切换 ----
+        let alignMode = localStorage.getItem('alignMode') || 'left';
+
+        function initAlign() {
+            document.body.classList.add('align-' + alignMode);
+            document.querySelectorAll('#alignToggle .mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.align === alignMode);
+            });
+        }
+        initAlign();
+        document.querySelectorAll('#alignToggle .mode-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const newAlign = this.dataset.align;
+                if (newAlign === alignMode) return;
+                alignMode = newAlign;
+                localStorage.setItem('alignMode', alignMode);
+                document.body.classList.remove('align-left', 'align-center');
+                document.body.classList.add('align-' + alignMode);
+                document.querySelectorAll('#alignToggle .mode-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                showToast(`已切换为 ${newAlign === 'left' ? '左对齐' : '居中'}`);
+            });
+        });
+
+        function updateOnlyEndCheckbox() {
+            const check = document.getElementById('onlyEndCheck');
+            const opt = document.getElementById('configOptionOnlyEnd');
+            if (mode === 'lrc') {
+                check.disabled = true;
+                if (opt) opt.classList.add('disabled');
+                if (check.checked) check.checked = false;
+            } else {
+                check.disabled = false;
+                if (opt) opt.classList.remove('disabled');
+            }
+        }
+
+        // ---- 步长与滚速 ----
+        function updateStepDisplay() { document.getElementById('stepValue').textContent = stepMs + 'ms'; }
+
+        function changeStep(delta) {
+            const newVal = Math.round(stepMs / STEP_STEP) * STEP_STEP + delta;
+            stepMs = Math.max(STEP_MIN, Math.min(STEP_MAX, newVal));
+            stepMs = Math.round(stepMs / STEP_STEP) * STEP_STEP;
+            updateStepDisplay();
+        }
+
+        function updateLeftBoundaryDisplay() {
+            document.getElementById('leftBoundaryValue').textContent = leftBoundaryMs + 'ms';
+        }
+
+        function updateRightBoundaryDisplay() {
+            document.getElementById('rightBoundaryValue').textContent = rightBoundaryMs + 'ms';
+        }
+
+        function changeLeftBoundary(delta) {
+            let newVal = leftBoundaryMs + delta;
+            newVal = Math.max(BOUNDARY_MIN, Math.min(BOUNDARY_MAX, newVal));
+            leftBoundaryMs = Math.round(newVal / BOUNDARY_STEP) * BOUNDARY_STEP;
+            updateLeftBoundaryDisplay();
+        }
+
+        function changeRightBoundary(delta) {
+            let newVal = rightBoundaryMs + delta;
+            newVal = Math.max(BOUNDARY_MIN, Math.min(BOUNDARY_MAX, newVal));
+            rightBoundaryMs = Math.round(newVal / BOUNDARY_STEP) * BOUNDARY_STEP;
+            updateRightBoundaryDisplay();
+        }
+
+        function updateSpeedDisplay() { document.getElementById('speedValue').textContent = scrollSpeed.toFixed(1); }
+
+        function changeSpeed(delta) {
+            let newSpeed = Math.round((scrollSpeed + delta) / SPEED_STEP) * SPEED_STEP;
+            newSpeed = Math.max(SPEED_MIN, Math.min(SPEED_MAX, newSpeed));
+            scrollSpeed = Math.round(newSpeed / SPEED_STEP) * SPEED_STEP;
+            updateSpeedDisplay();
+        }
+
+        // ---- 模态框 ----
+        function openNoteModal() {
+            const timeStr = fmtTime(ws.getCurrentTime());
+            $('#noteInput').value = '';
+            $('#noteInput').placeholder = timeStr + ' 输入内容…';
+            $('#noteModal').style.display = 'block';
+            $('#modalOverlay').style.display = 'block';
+            $('#noteInput').focus();
+        }
+
+        function closeNoteModal() {
+            $('#noteModal').style.display = 'none';
+            $('#modalOverlay').style.display = 'none';
+        }
+
+        function saveNote() {
+            const text = $('#noteInput').value.trim();
+            if (text === '') { closeNoteModal();
+                updateNextUntimestampedRow(); return; }
+            addItem(text);
+            closeNoteModal();
+        }
+
+        // ================================================================
+        //  🆕 配置模态框逻辑（收纳三个复选框）
+        // ================================================================
+        let configBackup = { spaceUpdate: false, bilingual: false, onlyEnd: false };
+
+        function openConfigModal() {
+            // 备份当前状态
+            configBackup.spaceUpdate = document.getElementById('spaceUpdateCheck').checked;
+            configBackup.bilingual = document.getElementById('bilingualCheck').checked;
+            configBackup.onlyEnd = document.getElementById('onlyEndCheck').checked;
+            // 更新 onlyEnd 禁用状态
+            updateOnlyEndCheckbox();
+            document.getElementById('configModal').style.display = 'block';
+            document.getElementById('configModalOverlay').style.display = 'block';
+        }
+
+        function closeConfigModal(save) {
+            if (!save) {
+                // 恢复备份
+                document.getElementById('spaceUpdateCheck').checked = configBackup.spaceUpdate;
+                document.getElementById('bilingualCheck').checked = configBackup.bilingual;
+                document.getElementById('onlyEndCheck').checked = configBackup.onlyEnd;
+            }
+            document.getElementById('configModal').style.display = 'none';
+            document.getElementById('configModalOverlay').style.display = 'none';
+            if (save) {
+                showToast('✅ 配置已保存');
+                // 更新 onlyEnd 禁用状态（在 LRC 模式下禁用）
+                updateOnlyEndCheckbox();
+            }
+        }
+
+        // ================================================================
+        //  绑定事件
+        // ================================================================
+        $('#playPause').onclick = function() {
+            togglePlayback();
+            this.blur();
+        };
+        $('#zoomIn').onclick = () => {
+            const newZoom = currentZoom * ZOOM_STEP;
+            if (newZoom > ZOOM_MAX) { showToast(`⚠️ 最大缩放 ${ZOOM_MAX}px/s`); return; }
+            currentZoom = newZoom;
+            ws.zoom(currentZoom);
+            $('#zoomValue').textContent = (Number.isInteger(currentZoom) ? currentZoom : currentZoom.toFixed(2)) + 'px/s';
+        };
+        $('#zoomOut').onclick = () => {
+            if (currentZoom <= 1) return;
+            currentZoom /= ZOOM_STEP;
+            ws.zoom(currentZoom);
+            $('#zoomValue').textContent = (Number.isInteger(currentZoom) ? currentZoom : currentZoom.toFixed(2)) + 'px/s';
+        };
+        document.getElementById('stepDown').onclick = () => changeStep(-STEP_STEP);
+        document.getElementById('stepUp').onclick = () => changeStep(STEP_STEP);
+        document.getElementById('speedDown').onclick = () => changeSpeed(-SPEED_STEP);
+        document.getElementById('speedUp').onclick = () => changeSpeed(SPEED_STEP);
+        document.getElementById('leftBoundaryDown').onclick = () => changeLeftBoundary(-BOUNDARY_STEP);
+        document.getElementById('leftBoundaryUp').onclick = () => changeLeftBoundary(BOUNDARY_STEP);
+        document.getElementById('rightBoundaryDown').onclick = () => changeRightBoundary(-BOUNDARY_STEP);
+        document.getElementById('rightBoundaryUp').onclick = () => changeRightBoundary(BOUNDARY_STEP);
+
+        // ---- 配置按钮 ----
+        document.getElementById('configBtn').onclick = function() {
+            openConfigModal();
+            this.blur();
+        };
+        document.getElementById('cancelConfig').onclick = () => closeConfigModal(false);
+        document.getElementById('saveConfig').onclick = () => closeConfigModal(true);
+        document.getElementById('configModalOverlay').onclick = () => closeConfigModal(false);
+
+        // ---- 其他按钮 ----
+        $('#audioFile').addEventListener('change', async e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            loadAudioFile(file);
+            $('#audioFile').value = '';
+        });
+        $('#importFile').addEventListener('change', async e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            await importFile(file);
+            $('#importFile').value = '';
+        });
+
+        $('#updateTimeBtn').onclick = () => updateNextUntimestampedRow();
+        $('#undoBtn').onclick = undo;
+        $('#redoBtn').onclick = redo;
+        $('#clearTimestampBtn').onclick = clearTimestamps;
+
+        document.getElementById('addItemBtn').addEventListener('click', function() {
+            openNoteModal();
+            this.blur();
+        });
+
+        document.querySelectorAll('#modeToggle .mode-btn').forEach(btn => {
+            btn.onclick = () => {
+                setMode(btn.dataset.mode);
+            };
+        });
+
+        document.getElementById('deleteSelectedBtn').onclick = () => {
+            const checkedIndices = [];
+            items.forEach((item, i) => { if (item.checked) checkedIndices.push(i); });
+            if (checkedIndices.length === 0) { alert('未选中任何行，请先勾选要删除的行。'); return; }
+            if (!confirm(`确定要删除选中的 ${checkedIndices.length} 行吗？`)) return;
+            saveState();
+            checkedIndices.sort((a, b) => b - a);
+            for (const idx of checkedIndices) items.splice(idx, 1);
+            document.getElementById('selectAllCheck').checked = false;
+            selectedIndex = -1;
+            selectedTimestamp = null;
+            recalculateLastTimestamp();
+            renderList();
+            updateLastTimestampDisplay();
+            showToast(`✅ 已删除 ${checkedIndices.length} 行`);
+        };
+
+        document.getElementById('selectAllCheck').addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            items.forEach(item => { item.checked = checked; });
+            renderList();
+        });
+
+        // ---- 导出按钮 ----
+        $('#exportBtn').onclick = () => {
+            const srtBtn = document.getElementById('exportSrtBtn');
+            if (mode === 'lrc') {
+                srtBtn.style.opacity = '0.5';
+                srtBtn.style.cursor = 'not-allowed';
+                srtBtn.style.pointerEvents = 'none';
+                srtBtn.title = 'LRC 模式下无法导出 SRT 格式';
+            } else {
+                srtBtn.style.opacity = '1';
+                srtBtn.style.cursor = 'pointer';
+                srtBtn.style.pointerEvents = 'auto';
+                srtBtn.title = '';
+            }
+            document.getElementById('exportModal').style.display = 'block';
+            document.getElementById('exportModalOverlay').style.display = 'block';
+        };
+        document.querySelectorAll('#exportModal .export-format-buttons .btn').forEach(btn => {
+            btn.onclick = () => {
+                const format = btn.dataset.format;
+                if (format === 'srt' && mode === 'lrc') { showToast('⚠️ LRC 模式下无法导出 SRT 格式'); return; }
+                if (format === 'srt') {
+                    document.getElementById('exportModal').style.display = 'none';
+                    document.getElementById('exportModalOverlay').style.display = 'none';
+                    document.getElementById('srtExportModal').style.display = 'block';
+                    document.getElementById('srtExportModalOverlay').style.display = 'block';
+                } else {
+                    document.getElementById('exportModal').style.display = 'none';
+                    document.getElementById('exportModalOverlay').style.display = 'none';
+                    exportFile(format);
+                }
+            };
+        });
+        document.querySelectorAll('#srtExportModal .export-format-buttons .btn').forEach(btn => {
+            btn.onclick = () => {
+                const filterType = btn.dataset.srtExport;
+                document.getElementById('srtExportModal').style.display = 'none';
+                document.getElementById('srtExportModalOverlay').style.display = 'none';
+                exportFile('srt', filterType);
+            };
+        });
+        document.getElementById('cancelSrtExport').onclick = () => {
+            document.getElementById('srtExportModal').style.display = 'none';
+            document.getElementById('srtExportModalOverlay').style.display = 'none';
+            document.getElementById('exportModal').style.display = 'block';
+            document.getElementById('exportModalOverlay').style.display = 'block';
+        };
+        document.getElementById('srtExportModalOverlay').onclick = () => {
+            document.getElementById('srtExportModal').style.display = 'none';
+            document.getElementById('srtExportModalOverlay').style.display = 'none';
+            document.getElementById('exportModal').style.display = 'block';
+            document.getElementById('exportModalOverlay').style.display = 'block';
+        };
+        document.getElementById('cancelExport').onclick = () => {
+            document.getElementById('exportModal').style.display = 'none';
+            document.getElementById('exportModalOverlay').style.display = 'none';
+        };
+        document.getElementById('exportModalOverlay').onclick = () => {
+            document.getElementById('exportModal').style.display = 'none';
+            document.getElementById('exportModalOverlay').style.display = 'none';
+        };
+
+        // ---- 模态框事件 ----
+        $('#cancelNote').onclick = closeNoteModal;
+        $('#modalOverlay').onclick = closeNoteModal;
+        $('#saveNote').onclick = saveNote;
+        $('#noteInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault();
+                saveNote(); }
+        });
+
+        // ---- 左边界 / 右边界 ----
+        document.getElementById('jumpToLeftBtn').addEventListener('click', function() {
+            const currentTime = ws.getCurrentTime();
+            const boundary = findSpeechBoundary(currentTime, 'left');
+            const duration = ws.getDuration();
+            if (boundary !== null && !isNaN(boundary)) {
+                let newTime = boundary + leftBoundaryMs / 1000;
+                newTime = Math.min(duration, newTime);
+                ws.setTime(newTime);
+                showToast(`⏪ 左边界 ${fmtTime(boundary)} → 偏移 +${leftBoundaryMs}ms`);
+            } else {
+                const newTime = Math.min(duration, currentTime + leftBoundaryMs / 1000);
+                ws.setTime(newTime);
+                showToast(`⏪ 直接右移 ${leftBoundaryMs}ms`);
+            }
+            this.blur();
+        });
+
+        document.getElementById('jumpToRightBtn').addEventListener('click', function() {
+            const currentTime = ws.getCurrentTime();
+            const boundary = findSpeechBoundary(currentTime, 'right');
+            if (boundary !== null && !isNaN(boundary)) {
+                let newTime = boundary - rightBoundaryMs / 1000;
+                newTime = Math.max(0, newTime);
+                ws.setTime(newTime);
+                showToast(`⏩ 右边界 ${fmtTime(boundary)} → 偏移 -${rightBoundaryMs}ms`);
+            } else {
+                const newTime = Math.max(0, currentTime - rightBoundaryMs / 1000);
+                ws.setTime(newTime);
+                showToast(`⏩ 直接左移 ${rightBoundaryMs}ms`);
+            }
+            this.blur();
+        });
+
+        // ---- 帮助 ----
+        $('#helpBtn').onclick = () => {
+            document.getElementById('helpModal').style.display = 'block';
+            document.getElementById('helpModalOverlay').style.display = 'block';
+        };
+
+        function closeHelpModal() {
+            document.getElementById('helpModal').style.display = 'none';
+            document.getElementById('helpModalOverlay').style.display = 'none';
+        }
+        $('#closeHelp').onclick = closeHelpModal;
+        document.getElementById('helpModalOverlay').onclick = closeHelpModal;
+
+        // ---- 播放结束自动退出预览 ----
+        ws.on('finish', () => {
+            if (previewActive) { stopPreview();
+                showToast('📌 预览结束'); }
+        });
+
+        // ---- 波形事件 ----
+        ws.on('play', () => { $('#playPause').innerHTML = '<span>⏸</span><span class="btn-label">暂停</span>'; });
+        ws.on('pause', () => {
+            $('#playPause').innerHTML = '<span>▶</span><span class="btn-label">播放</span>';
+            if (previewActive) stopPreview();
+        });
+        ws.on('timeupdate', () => {
+            $('#currentTime').textContent = fmtTime(ws.getCurrentTime());
+            if (previewActive) updatePreviewHighlight();
+        });
+        ws.on('dblclick', openNoteModal);
+
+        // ---- 滚轮控制 ----
+        const waveformWrapper = document.getElementById('waveformWrapper');
+        let lastWheelTime = 0;
+        const WHEEL_THROTTLE = 20;
+        waveformWrapper.addEventListener('wheel', function(e) {
+            if (ws.isPlaying()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const now = Date.now();
+            if (now - lastWheelTime < WHEEL_THROTTLE) return;
+            lastWheelTime = now;
+            const duration = ws.getDuration();
+            if (!duration) return;
+            const baseStep = scrollSpeed;
+            const step = baseStep / (currentZoom / 6.25);
+            const delta = (Math.abs(e.deltaY) > Math.abs(e.deltaX)) ? e.deltaY : e.deltaX;
+            const direction = delta > 0 ? 1 : -1;
+            let newTime = ws.getCurrentTime() + direction * step;
+            newTime = Math.max(0, Math.min(duration, newTime));
+            ws.setTime(newTime);
+        }, { passive: false });
+
+        // ---- 悬停游标 ----
+        const hoverCursor = document.getElementById('hoverCursor');
+        let isHovering = false;
+        waveformWrapper.addEventListener('mousemove', (e) => {
+            const rect = waveformWrapper.getBoundingClientRect();
+            let percent = (e.clientX - rect.left) / rect.width;
+            percent = Math.max(0, Math.min(1, percent));
+            hoverCursor.style.left = (percent * 100) + '%';
+            hoverCursor.style.display = 'block';
+            isHovering = true;
+        });
+        waveformWrapper.addEventListener('mouseleave', () => {
+            hoverCursor.style.display = 'none';
+            isHovering = false;
+        });
+        waveformWrapper.addEventListener('mousedown', () => { hoverCursor.style.display = 'none'; });
+        document.addEventListener('mouseup', (e) => {
+            if (isHovering) {
+                const rect = waveformWrapper.getBoundingClientRect();
+                if (e.clientX >= rect.left && e.clientX <= rect.right &&
+                    e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                    hoverCursor.style.display = 'block';
+                }
+            }
+        });
+
+        // ---- 键盘事件 ----
+        document.body.addEventListener('keydown', e => {
+            const active = document.activeElement;
+            if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') {
+                if (e.ctrlKey && e.key === 'z') { e.preventDefault();
+                    undo(); return; }
+                if (e.ctrlKey && e.key === 'y') { e.preventDefault();
+                    redo(); return; }
+                if (active.type === 'checkbox') return;
+                return;
+            }
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault();
+                undo(); return; }
+            if (e.ctrlKey && e.key === 'y') { e.preventDefault();
+                redo(); return; }
+            if (e.key === 'Enter') { e.preventDefault();
+                openNoteModal(); return; }
+            if (e.code === 'Space') {
+                e.preventDefault();
+                const checkBox = document.getElementById('spaceUpdateCheck');
+                if (checkBox && checkBox.checked) updateNextUntimestampedRow();
+                else ws.playPause();
+                return;
+            }
+            if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+                e.preventDefault();
+                if (e.ctrlKey) {
+                    if (e.code === 'ArrowLeft') {
+                        document.getElementById('jumpToLeftBtn').click();
+                    } else {
+                        document.getElementById('jumpToRightBtn').click();
+                    }
+                } else {
+                    const stepSec = stepMs / 1000;
+                    if (e.code === 'ArrowLeft') ws.setTime(Math.max(0, ws.getCurrentTime() - stepSec));
+                    else ws.setTime(ws.getCurrentTime() + stepSec);
+                }
+            }
+            if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                e.preventDefault();
+                if (e.code === 'ArrowUp') changeStep(STEP_STEP);
+                else changeStep(-STEP_STEP);
+            }
+        });
+
+        // ---- 拖拽 ----
+        const dragOverlay = document.getElementById('dragOverlay');
+        let dragCounter = 0;
+
+        function handleDragEnter(e) { e.preventDefault();
+            dragCounter++; if (dragCounter === 1) dragOverlay.classList.add('active'); }
+
+        function handleDragOver(e) { e.preventDefault(); }
+
+        function handleDragLeave(e) { e.preventDefault();
+            dragCounter--; if (dragCounter === 0) dragOverlay.classList.remove('active'); }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            dragCounter = 0;
+            dragOverlay.classList.remove('active');
+            const files = e.dataTransfer.files;
+            if (files.length === 0) return;
+            for (const file of files) {
+                const name = file.name;
+                const ext = name.split('.').pop().toLowerCase();
+                if (file.type.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext)) { loadAudioFile(
+                        file); continue; }
+                if (['txt', 'lrc', 'srt'].includes(ext)) { importFile(file); continue; }
+                showToast(`⚠️ 不支持的文件类型: ${ext}`);
+            }
+        }
+        document.addEventListener('dragenter', handleDragEnter);
+        document.addEventListener('dragover', handleDragOver);
+        document.addEventListener('dragleave', handleDragLeave);
+        document.addEventListener('drop', handleDrop);
+
+        // ---- 时间戳转移 ----
+        document.getElementById('transferBtn').addEventListener('click', function() {
+            if (mode !== 'lrc') { alert('请先切换到 LRC 模式（当前为 SRT 模式），以便转移时间戳。'); return; }
+            let hasTime = false;
+            for (let item of items) { if (item.time !== undefined && item.time !== null) { hasTime = true; break; } }
+            if (!hasTime) { alert('当前 LRC 歌词中没有时间戳，无法转移。'); return; }
+            if (items.length === 0) { alert('歌词列表为空。'); return; }
+            if (!confirm('将把当前 LRC 歌词的时间戳复制为 SRT 字幕的开始时间，并切换到 SRT 模式。确定继续？')) return;
+            items.forEach(item => {
+                item.start = (item.time !== undefined && item.time !== null) ? item.time : null;
+                item.end = null;
+            });
+            mode = 'srt';
+            updateOnlyEndCheckbox();
+            srtAutoRow = 0;
+            srtAutoPhase = 'start';
+            selectedIndex = -1;
+            selectedTimestamp = null;
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+            document.getElementById('modalTitle').textContent = '✏️ 添加字幕';
+            document.getElementById('modalSub').textContent = '输入文字后按回车保存（时间戳后续设置）';
+            recalculateLastTimestamp();
+            renderList();
+            updateLastTimestampDisplay();
+            showToast('✅ 时间戳已复制到 SRT 开始时间，已切换到 SRT 模式');
+        });
+
+        // ---- 游标定位 ----
+        document.getElementById('jumpToTimestampBtn').addEventListener('click', function() {
+            if (selectedIndex < 0 || selectedIndex >= items.length) { showToast('⚠️ 请先点击选中一行歌词/字幕'); return; }
+            const item = items[selectedIndex];
+            let time = null;
+            if (mode === 'lrc') time = item.time;
+            else time = item.start;
+            if (time === undefined || time === null || isNaN(time)) { showToast('⚠️ 该行没有时间戳，无法跳转'); return; }
+            const duration = ws.getDuration();
+            if (!duration || duration === 0) { showToast('⚠️ 请先加载音频文件'); return; }
+            ws.setTime(time);
+            $('#currentTime').textContent = fmtTime(time);
+            showToast(`🎯 已跳转到第 ${selectedIndex+1} 行，时间 ${fmtTime(time)}`);
+        });
+
+        // ---- 跳转最新时间戳 ----
+        document.getElementById('jumpLatestTimestampBtn').addEventListener('click', function() {
+            let latestIndex = -1;
+            let latestTime = 0;
+            if (mode === 'lrc') {
+                for (let i = items.length - 1; i >= 0; i--) {
+                    const time = items[i].time;
+                    if (time !== undefined && time !== null && time > 0) { latestIndex = i;
+                        latestTime = time; break; }
+                }
+            } else {
+                for (let i = items.length - 1; i >= 0; i--) {
+                    const start = items[i].start;
+                    if (start !== undefined && start !== null && start > 0) { latestIndex = i;
+                        latestTime = start; break; }
+                }
+            }
+            if (latestIndex === -1) { showToast('⚠️ 没有找到任何有效时间戳'); return; }
+            selectedIndex = latestIndex;
+            renderList();
+            const selector = mode === 'lrc' ? `.marker-item[data-index="${latestIndex}"]` :
+                `.srt-item[data-index="${latestIndex}"]`;
+            const el = document.querySelector(selector);
+            if (el) {
+                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                el.classList.add('flash');
+                setTimeout(() => el.classList.remove('flash'), 1600);
+            }
+            if (latestTime > 0) {
+                ws.setTime(latestTime);
+                $('#currentTime').textContent = fmtTime(latestTime);
+                showToast(`⏩ 已跳转到最新时间戳：${fmtTime(latestTime)}（第 ${latestIndex+1} 行）`);
+            }
+        });
+
+        // ---- 初始化 ----
+        ws.on('ready', () => { ws.zoom(currentZoom); });
+        $('#zoomValue').textContent = currentZoom.toFixed(2) + 'px/s';
+        renderList();
+        updateSpeedDisplay();
+        recalculateLastTimestamp();
+        updateLastTimestampDisplay();
+        updateOnlyEndCheckbox();
+        if (!('showSaveFilePicker' in window)) console.log('使用 fallback 下载模式');
+
+        updateLeftBoundaryDisplay();
+        updateRightBoundaryDisplay();
+
+        console.log('🎵 歌词/字幕工具已启动，配置模态框已集成！');
+    </script>
+</body>
+</html>
