@@ -346,13 +346,13 @@
         .marker-item .num { color: #8a9fb8; user-select: none; min-width: 24px; text-align: right; font-weight: 500; font-size: 12.5px; padding-top: 1px; font-feature-settings: "tnum"; }
         body.dark .marker-item .num { color: #6a7f9b; }
         .marker-item .text { flex: 1; outline: none; white-space: pre-wrap; word-break: break-word; min-height: 1.4em; user-select: text; pointer-events: auto; color: #1a2b3e; line-height: 1.6; padding: 1px 3px; border-radius: 4px;
-            font-weight: 700;
+            font-weight: 600;
             font-size: 16px;
         }
         body.dark .marker-item .text { color: #e6edf5; }
         .marker-item .text:focus { background: rgba(255,255,255,0.50); border-radius: 6px; box-shadow: 0 0 0 2px rgba(79,110,247,0.10); }
         body.dark .marker-item .text:focus { background: rgba(40,55,75,0.40); box-shadow: 0 0 0 2px rgba(79,110,247,0.12); }
-        .marker-item .text:empty::before { content: "（空歌词）"; color: #b0c0d0; font-style: italic; font-weight: 400; }
+        .marker-item .text:empty::before { content: "（空歌词）"; color: #b0c0d0; font-style: italic; font-weight: 500; }
         body.dark .marker-item .text:empty::before { color: #5a6a7a; }
 
         /* ----- SRT 条目 (.srt-item) ----- */
@@ -367,7 +367,7 @@
             border: 1px solid rgba(200,212,226,0.20);
             transition: all 0.25s;
             box-shadow: 0 1px 4px rgba(0,0,0,0.02);
-            font-weight: 700;
+            font-weight: 600;
             font-size: 16px;
         }
         .srt-item:hover { background: rgba(255,255,255,0.80); border-color: rgba(200,212,226,0.40); box-shadow: 0 2px 16px rgba(0,0,0,0.04); transform: translateY(-1px); }
@@ -594,6 +594,67 @@
             opacity: 0.45;
             pointer-events: none;
         }
+		
+		/* ===== 时间戳颜色 ===== */
+		.lrc-time { color: inherit; font-weight: 600; min-width: 70px; }
+		.lrc-time.has-time { color: #fe65a6; }
+		.srt-start.has-time, .srt-end.has-time { color: #fe65a6; }
+
+		/* ===== 预览高亮行字体放大 ===== */
+		.marker-item.preview-highlight .text,
+		.srt-item.preview-highlight .srt-text,
+		.marker-item.preview-highlight .lrc-time,
+		.srt-item.preview-highlight .srt-times span {
+			font-size: 20px !important;
+			font-weight: 700 !important;
+			transition: font-size 0.2s, font-weight 0.2s;
+		}					
+		.lrc-line { display: inline-flex; align-items: baseline; gap: 4px; flex: 1; }
+		
+		/* ===== 深色模式下保持时间戳粉色 ===== */
+		body.dark .lrc-time.has-time,
+		body.dark .srt-start.has-time,
+		body.dark .srt-end.has-time {
+			color: #fe65a6 !important;
+		}
+		/* ===== LRC 模式居中对齐修复 ===== */
+/* 左对齐模式（保持原有行为） */
+body.align-left .marker-item .lrc-line {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    flex: 1;
+    width: 100%;
+}
+body.align-left .marker-item .text {
+    flex: 1;
+    text-align: left;
+}
+
+/* 居中对齐模式 - 时间戳和歌词作为一个整体居中 */
+body.align-center .marker-item .lrc-line {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+    flex: 1;
+    width: 100%;
+}
+body.align-center .marker-item .text {
+    flex: 0 0 auto;
+    text-align: center;
+    min-width: 0;
+}
+body.align-center .marker-item .lrc-time {
+    flex: 0 0 auto;
+}
+
+/* 时间戳为空时不占空间，避免居中偏移 */
+.lrc-time:not(.has-time) {
+    min-width: 0 !important;
+}
+		
     </style>
 </head>
 <body>
@@ -1329,40 +1390,41 @@
         }
 
         // ---- LRC 更新 ----
-        function updateLRC() {
-            let targetIndex = -1;
-            if (selectedIndex >= 0 && selectedIndex < items.length) {
-                const item = items[selectedIndex];
-                if (!hasTimestamp(generateLRCItem(item))) targetIndex = selectedIndex;
-            }
-            if (targetIndex === -1) {
-                if (items.length === 0) { alert('列表为空，请先添加歌词。'); return; }
-                for (let i = 0; i < items.length; i++) {
-                    if (!hasTimestamp(generateLRCItem(items[i]))) { targetIndex = i; break; }
-                }
-                if (targetIndex === -1) { showToast('🎉 所有歌词行都已包含时间戳！'); return; }
-            }
-            saveState();
-            const now = ws.getCurrentTime();
-            const item = items[targetIndex];
-            item.time = now;
-            const isBilingual = document.getElementById('bilingualCheck').checked;
-            if (isBilingual && targetIndex + 1 < items.length) {
-                items[targetIndex + 1].time = now;
-            }
-            lastTimestamp = now;
-            selectedIndex = targetIndex;
-            renderList();
-            updateLastTimestampDisplay();
-            setTimeout(() => {
-                const el = document.querySelector(`.marker-item[data-index="${targetIndex}"]`);
-                if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                    el.classList.add('flash');
-                    setTimeout(() => el.classList.remove('flash'), 1600); }
-            }, 120);
-            showToast(isBilingual ? `✅ 已同步第 ${targetIndex+1} 行和第 ${targetIndex+2} 行时间戳` :
-                `✅ 已为第 ${targetIndex+1} 行添加时间戳`);
-        }
+		function updateLRC() {
+			let targetIndex = -1;
+			// 优先使用当前选中的行（如果未完成）
+			if (selectedIndex >= 0 && selectedIndex < items.length) {
+				const item = items[selectedIndex];
+				if (!(item.time && item.time > 0)) targetIndex = selectedIndex;
+			}
+			if (targetIndex === -1) {
+				if (items.length === 0) { alert('列表为空，请先添加歌词。'); return; }
+				for (let i = 0; i < items.length; i++) {
+					if (!(items[i].time && items[i].time > 0)) { targetIndex = i; break; }
+				}
+				if (targetIndex === -1) { showToast('🎉 所有歌词行都已包含时间戳！'); return; }
+			}
+			saveState();
+			const now = ws.getCurrentTime();
+			const item = items[targetIndex];
+			item.time = now;
+			const isBilingual = document.getElementById('bilingualCheck').checked;
+			if (isBilingual && targetIndex + 1 < items.length) {
+				items[targetIndex + 1].time = now;
+			}
+			lastTimestamp = now;
+			selectedIndex = targetIndex;
+			renderList();
+			updateLastTimestampDisplay();
+			setTimeout(() => {
+				const el = document.querySelector(`.marker-item[data-index="${targetIndex}"]`);
+				if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+					el.classList.add('flash');
+					setTimeout(() => el.classList.remove('flash'), 1600); }
+			}, 120);
+			showToast(isBilingual ? `✅ 已同步第 ${targetIndex+1} 行和第 ${targetIndex+2} 行时间戳` :
+				`✅ 已为第 ${targetIndex+1} 行添加时间戳`);
+		}
 
         function generateLRCItem(item) {
             if (item.time !== undefined && item.time !== null) return fmtTime(item.time) + (item.text || '');
@@ -1711,128 +1773,123 @@
         }
 
         // ---- 渲染列表 ----
-        function renderList() {
-            const container = document.getElementById('markerList');
-            const countEl = document.getElementById('markerCount');
-            if (mode === 'lrc') {
-                let html = '';
-                items.forEach((item, i) => {
-                    const displayText = generateLRCItem(item);
-                    const active = (i === selectedIndex) ? 'active' : '';
-                    const checked = item.checked ? 'checked' : '';
-                    html += `
-                        <div class="marker-item ${active}" data-index="${i}">
-                            <input type="checkbox" class="item-check" data-index="${i}" ${checked} />
-                            <span class="num">${i+1}.</span>
-                            <span class="text" contenteditable="plaintext-only" data-index="${i}">${displayText}</span>
-                        </div>
-                    `;
-                });
-                container.innerHTML = html;
-                container.querySelectorAll('.item-check').forEach(el => {
-                    const idx = parseInt(el.dataset.index);
-                    el.addEventListener('change', () => {
-                        items[idx].checked = el.checked;
-                        const allChecked = items.every(it => it.checked);
-                        document.getElementById('selectAllCheck').checked = allChecked;
-                    });
-                });
-                container.querySelectorAll('.marker-item .text').forEach(el => {
-                    const idx = parseInt(el.dataset.index);
-                    el.addEventListener('focus', () => {
-                        if (selectedIndex === idx) return;
-                        selectedIndex = idx;
-                        renderList();
-                        setTimeout(() => el.focus(), 0);
-                    });
-                    el.addEventListener('input', () => {
-                        const raw = el.textContent.trim();
-                        const match = raw.match(/^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
-                        if (match) {
-                            const m = parseInt(match[1], 10);
-                            const s = parseInt(match[2], 10);
-                            const ms = parseInt(match[3].padEnd(3, '0').slice(0, 3), 10);
-                            const time = m * 60 + s + ms / 1000;
-                            items[idx].time = time;
-                            items[idx].text = match[4];
-                        } else {
-                            items[idx].text = raw;
-                        }
-                    });
-                    el.addEventListener('click', e => e.stopPropagation());
-                });
-                countEl.textContent = items.length + ' 条';
-            } else {
-                let html = '';
-                items.forEach((item, i) => {
-                    const startStr = item.start !== undefined && item.start !== null ? fmtTimeSRT(item.start) :
-                        '00:00:00,000';
-                    const endStr = item.end !== undefined && item.end !== null ? fmtTimeSRT(item.end) :
-                        '00:00:00,000';
-                    const active = (i === selectedIndex) ? 'active' : '';
-                    const checked = item.checked ? 'checked' : '';
-                    const startSel = (selectedTimestamp && selectedTimestamp.row === i && selectedTimestamp.type ===
-                        'start') ? 'selected' : '';
-                    const endSel = (selectedTimestamp && selectedTimestamp.row === i && selectedTimestamp.type ===
-                        'end') ? 'selected' : '';
-                    html += `
-                        <div class="srt-item ${active}" data-index="${i}">
-                            <div class="srt-top-row">
-                                <input type="checkbox" class="item-check" data-index="${i}" ${checked} />
-                                <span class="srt-index-num">${i+1}</span>
-                                <span class="srt-times">
-                                    <span class="srt-start ${startSel}" data-row="${i}" data-type="start">${startStr}</span>
-                                    <span style="color:#888;"> --> </span>
-                                    <span class="srt-end ${endSel}" data-row="${i}" data-type="end">${endStr}</span>
-                                </span>
-                            </div>
-                            <div class="srt-text" contenteditable="plaintext-only" data-index="${i}">${item.text || ''}</div>
-                        </div>
-                    `;
-                });
-                container.innerHTML = html;
-                container.querySelectorAll('.item-check').forEach(el => {
-                    const idx = parseInt(el.dataset.index);
-                    el.addEventListener('change', () => {
-                        items[idx].checked = el.checked;
-                        const allChecked = items.every(it => it.checked);
-                        document.getElementById('selectAllCheck').checked = allChecked;
-                    });
-                });
-                container.querySelectorAll('.srt-text').forEach(el => {
-                    const idx = parseInt(el.dataset.index);
-                    el.addEventListener('focus', () => {
-                        if (selectedIndex === idx) return;
-                        selectedIndex = idx;
-                        renderList();
-                        setTimeout(() => el.focus(), 0);
-                    });
-                    el.addEventListener('input', () => {
-                        items[idx].text = el.textContent.trim();
-                    });
-                    el.addEventListener('click', e => e.stopPropagation());
-                });
-                container.querySelectorAll('.srt-times span').forEach(el => {
-                    el.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const row = parseInt(el.dataset.row);
-                        const type = el.dataset.type;
-                        if (selectedTimestamp && selectedTimestamp.row === row && selectedTimestamp.type ===
-                            type) {
-                            selectedTimestamp = null;
-                        } else {
-                            selectedTimestamp = { row, type };
-                            selectedIndex = row;
-                        }
-                        renderList();
-                    });
-                });
-                countEl.textContent = items.length + ' 条';
-            }
-            const allChecked = items.every(it => it.checked);
-            document.getElementById('selectAllCheck').checked = allChecked;
-            updateLastTimestampDisplay();
-        }
+		function renderList() {
+			const container = document.getElementById('markerList');
+			const countEl = document.getElementById('markerCount');
+			if (mode === 'lrc') {
+				let html = '';
+				items.forEach((item, i) => {
+					const active = (i === selectedIndex) ? 'active' : '';
+					const checked = item.checked ? 'checked' : '';
+					const timeStr = (item.time && item.time > 0) ? fmtTime(item.time) : '';
+					const hasTime = item.time && item.time > 0;
+					const timeClass = hasTime ? 'has-time' : '';
+					html += `
+						<div class="marker-item ${active}" data-index="${i}">
+							<input type="checkbox" class="item-check" data-index="${i}" ${checked} />
+							<span class="num">${i+1}.</span>
+							<span class="lrc-line">
+								<span class="lrc-time ${timeClass}" contenteditable="false">${timeStr}</span>
+								<span class="text" contenteditable="plaintext-only" data-index="${i}">${item.text || ''}</span>
+							</span>
+						</div>
+					`;
+				});
+				container.innerHTML = html;
+				container.querySelectorAll('.item-check').forEach(el => {
+					const idx = parseInt(el.dataset.index);
+					el.addEventListener('change', () => {
+						items[idx].checked = el.checked;
+						const allChecked = items.every(it => it.checked);
+						document.getElementById('selectAllCheck').checked = allChecked;
+					});
+				});
+				container.querySelectorAll('.marker-item .text').forEach(el => {
+					const idx = parseInt(el.dataset.index);
+					el.addEventListener('focus', () => {
+						if (selectedIndex === idx) return;
+						selectedIndex = idx;
+						renderList();
+						setTimeout(() => el.focus(), 0);
+					});
+					el.addEventListener('input', () => {
+						// 只更新歌词文本，不解析时间戳（时间戳独立存储）
+						items[idx].text = el.textContent.trim();
+					});
+					el.addEventListener('click', e => e.stopPropagation());
+				});
+				countEl.textContent = items.length + ' 条';
+			} else {
+				// SRT 模式
+				let html = '';
+				items.forEach((item, i) => {
+					const startStr = item.start !== undefined && item.start !== null ? fmtTimeSRT(item.start) : '00:00:00,000';
+					const endStr = item.end !== undefined && item.end !== null ? fmtTimeSRT(item.end) : '00:00:00,000';
+					const active = (i === selectedIndex) ? 'active' : '';
+					const checked = item.checked ? 'checked' : '';
+					const startSel = (selectedTimestamp && selectedTimestamp.row === i && selectedTimestamp.type === 'start') ? 'selected' : '';
+					const endSel = (selectedTimestamp && selectedTimestamp.row === i && selectedTimestamp.type === 'end') ? 'selected' : '';
+					const startHas = item.start && item.start > 0;
+					const endHas = item.end && item.end > 0;
+					const startClass = startHas ? 'has-time' : '';
+					const endClass = endHas ? 'has-time' : '';
+					html += `
+						<div class="srt-item ${active}" data-index="${i}">
+							<div class="srt-top-row">
+								<input type="checkbox" class="item-check" data-index="${i}" ${checked} />
+								<span class="srt-index-num">${i+1}</span>
+								<span class="srt-times">
+									<span class="srt-start ${startSel} ${startClass}" data-row="${i}" data-type="start">${startStr}</span>
+									<span style="color:#888;"> --> </span>
+									<span class="srt-end ${endSel} ${endClass}" data-row="${i}" data-type="end">${endStr}</span>
+								</span>
+							</div>
+							<div class="srt-text" contenteditable="plaintext-only" data-index="${i}">${item.text || ''}</div>
+						</div>
+					`;
+				});
+				container.innerHTML = html;
+				container.querySelectorAll('.item-check').forEach(el => {
+					const idx = parseInt(el.dataset.index);
+					el.addEventListener('change', () => {
+						items[idx].checked = el.checked;
+						const allChecked = items.every(it => it.checked);
+						document.getElementById('selectAllCheck').checked = allChecked;
+					});
+				});
+				container.querySelectorAll('.srt-text').forEach(el => {
+					const idx = parseInt(el.dataset.index);
+					el.addEventListener('focus', () => {
+						if (selectedIndex === idx) return;
+						selectedIndex = idx;
+						renderList();
+						setTimeout(() => el.focus(), 0);
+					});
+					el.addEventListener('input', () => {
+						items[idx].text = el.textContent.trim();
+					});
+					el.addEventListener('click', e => e.stopPropagation());
+				});
+				container.querySelectorAll('.srt-times span').forEach(el => {
+					el.addEventListener('click', (e) => {
+						e.stopPropagation();
+						const row = parseInt(el.dataset.row);
+						const type = el.dataset.type;
+						if (selectedTimestamp && selectedTimestamp.row === row && selectedTimestamp.type === type) {
+							selectedTimestamp = null;
+						} else {
+							selectedTimestamp = { row, type };
+							selectedIndex = row;
+						}
+						renderList();
+					});
+				});
+				countEl.textContent = items.length + ' 条';
+			}
+			const allChecked = items.every(it => it.checked);
+			document.getElementById('selectAllCheck').checked = allChecked;
+			updateLastTimestampDisplay();
+		}
 
         // ---- 添加新项 ----
         function addItem(text) {
